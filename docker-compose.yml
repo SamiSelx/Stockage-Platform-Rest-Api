@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  redis:
+    image: redis
+    container_name: redis-compose
+    ports:
+      - 6379:6379
+    command: ["redis-server", "--appendonly", "yes","--requirepass","123456"]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
