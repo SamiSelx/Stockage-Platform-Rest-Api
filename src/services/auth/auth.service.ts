@@ -32,6 +32,7 @@ export class AuthServices {
           const msg = formatString(resp.message, user.toObject());
           authLogger.info(msg, { type: resp.type });
           
+          res.cookie("token", token, getCookiesSettings(stay));
 
           return new SuccessResponseC(
             resp.type,
@@ -114,13 +115,13 @@ export class AuthServices {
       const resp: ICode<IAuthLogs> = authLogs.REGISTER_SUCCESS;
       const msg = formatString(resp.message, user.toObject());
       authLogger.info(msg, { type: resp.type });
-      res.cookie("token", token, getCookiesSettings(stay));
-          const job = {
-            to: email,
-            subject:"Account Created",
-            text:"Your account has been created successfully"
-          }
-          emailQueue.add(job,{attempts:3})
+      // res.cookie("token", token, getCookiesSettings(stay));
+      //     const job = {
+      //       to: email,
+      //       subject:"Account Created",
+      //       text:"Your account has been created successfully"
+      //     }
+      //     emailQueue.add(job,{attempts:3})
       return new SuccessResponseC(
         resp.type,
         { ...user.Optimize(), token: token },
@@ -163,6 +164,35 @@ export class AuthServices {
       authLogger.error(msg, err as Error);
       return new ErrorResponseC(
         authLogs.AUTH_ERROR_GENERIC.type,
+        HttpCodes.InternalServerError.code,
+        msg
+      );
+    }
+  };
+
+  static executeLogout = async (user: UserD , res : Response) => {
+    try {
+      let msg = formatString(authLogs.LOGOUT_SUCCESS.message, {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+      authLogger.info(msg, { type: authLogs.LOGOUT_SUCCESS.type });
+      res.clearCookie("token");
+      return new SuccessResponseC(
+        authLogs.LOGOUT_SUCCESS.type,
+        null,
+        msg,
+        HttpCodes.Accepted.code
+      );
+    } catch (err) {
+      const msg = formatString(authLogs.LOGOUT_ERROR_GENERIC.message, {
+        error: (err as Error)?.message || "",
+        email: user.email,
+      });
+      authLogger.error(msg, err as Error);
+      return new ErrorResponseC(
+        authLogs.LOGOUT_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
         msg
       );

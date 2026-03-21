@@ -20,7 +20,13 @@ export const SignUp = async (req: MyRequest<UserD>, res: Response,) => {
 
 export const AuthBack = async (req:MyRequest<UserD>,res:Response) => {
 	const { stay = false } = req.body;
-	const resulte = await AuthServices.executeAuthBack(req.user! , stay , res);
-	if (resulte instanceof SuccessResponseC) return SuccessResponse(res, resulte.code, resulte.data, resulte.message , resulte.status);
-	if (resulte instanceof ErrorResponseC) return ErrorResponse(res, resulte.code, resulte.message, resulte.error );
+	const result = await AuthServices.executeAuthBack(req.user! , stay , res);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message , result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
+}
+
+export const Logout = async (req:MyRequest<UserD>,res:Response) => {
+	const result = await AuthServices.executeLogout(req.user! , res);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message , result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 }
