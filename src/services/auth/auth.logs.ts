@@ -26,151 +26,157 @@ export type IAuthLogs =
   | "REGISTER_ERROR_INVALID_INPUT"
   | "REGISTER_ERROR_EMAIL_EXIST"
   | "REGISTER_ERROR_PASSWORD"
-  | "USER_ISN_T_ENABLED";
+  | "USER_ISN_T_ENABLED"
+  | "LOGOUT_ERROR_GENERIC";
 
 export const authLogs: IErrors<IAuthLogs> = {
   LOGIN_SUCCESS: {
     code: 0,
     message:
-      'User "{email} : {lastName} {firstName}" has logged in successfully.',
+      'L\'utilisateur "{email} : {lastName} {firstName}" s\'est connecté avec succès.',
     type: "LOGIN_SUCCESS",
   },
   MOBILE_LOGIN_SUCCESS: {
     code: 1,
     message:
-      'User "{email} : {lastName} {firstName}" has logged in successfully from mobile.',
+      'L\'utilisateur "{email} : {lastName} {firstName}" s\'est connecté avec succès depuis mobile.',
     type: "MOBILE_LOGIN_SUCCESS",
   },
   LOGIN_ERROR_GENERIC: {
     code: 2,
-    message: "Error occurred while login in user '{email}': {error}",
+    message: "Une erreur s'est produite lors de la connexion de l'utilisateur '{email}': {error}",
     type: "LOGIN_ERROR_GENERIC",
   },
   LOGIN_ERROR_INVALID_INPUT: {
     code: 3,
-    message: "Invalid input for Log in : {input}",
+    message: "Entrée invalide pour la connexion : {input}",
     type: "LOGIN_ERROR_INVALID_INPUT",
   },
   LOGIN_ERROR_EMAIL_NOT_FOUND: {
     code: 4,
-    message: "Failed to login email doesn't exist {email}.",
+    message: "Échec de la connexion l'email n'existe pas {email}.",
     type: "LOGIN_ERROR_EMAIL_NOT_FOUND",
   },
   LOGIN_ERROR_INCORRECT_PASSWORD_FOUND: {
     code: 5,
-    message: "Failed to login password incorrect {email}.",
+    message: "Échec de la connexion mot de passe incorrect {email}.",
     type: "LOGIN_ERROR_INCORRECT_PASSWORD_FOUND",
   },
   LOGIN_ERROR_DISABLED_ACCOUNT: {
     code: 6,
-    message: "Failed to login to a disabled account {email}.",
+    message: "Échec de la connexion à un compte désactivé {email}.",
     type: "LOGIN_ERROR_DISABLED_ACCOUNT",
   },
   USER_ISN_T_LOGGED: {
     code: 7,
-    message: "You aren't logged in to do this action.",
+    message: "Vous n'êtes pas connecté pour effectuer cette action.",
     type: "USER_ISN_T_LOGGED",
   },
   USER_ISN_T_ADMIN: {
     code: 10,
-    message: "Logged In user isn't a admins.",
+    message: "L'utilisateur connecté n'est pas un administrateur.",
     type: "USER_ISN_T_ADMIN",
   },
   USER_ISN_T_USER: {
     code: 20,
-    message: "Logged In user isn't a user.",
+    message: "L'utilisateur connecté n'est pas un utilisateur.",
     type: "USER_ISN_T_USER",
   },
   ADMIN_DOES_NOT_HAVE_ROLE: {
     code: 11,
-    message: "Logged In admin doesn't have a role yet.",
+    message: "L'administrateur connecté n'a pas encore de rôle.",
     type: "ADMIN_DOES_NOT_HAVE_ROLE",
   },
   ERROR_SESSION_CREDENTIALS: {
     code: 13,
-    message: "Session doesn't seem correct there is no token.",
+    message: "La session ne semble pas correcte il n'y a pas de token.",
     type: "ERROR_SESSION_CREDENTIALS",
   },
   ERROR_WHILE_CHECKING_CREDENTIALS: {
     code: 14,
-    message: "Couldn't create a correct session.",
+    message: "Impossible de créer une session correcte.",
     type: "ERROR_WHILE_CHECKING_CREDENTIALS",
   },
   GENERIC_CREDENTIALS_ERROR: {
     code: 15,
-    message: "Generic error happened while loading credentials.",
+    message: "Une erreur générique s'est produite lors du chargement des identifiants.",
     type: "GENERIC_CREDENTIALS_ERROR",
   },
   AUTH_BACK: {
     code: 16,
     message:
-      'User "{email} : {{lastName} {firstName}" has logged back successfully.',
+      'L\'utilisateur "{email} : {lastName} {firstName}" s\'est reconnecté avec succès.',
     type: "AUTH_BACK",
   },
   LOGOUT_SUCCESS: {
     code: 17,
     message:
-      'User "{email} : {lastName} {firstName}" has logged out successfully.',
+      'L\'utilisateur "{email} : {lastName} {firstName}" s\'est déconnecté avec succès.',
     type: "LOGOUT_SUCCESS",
   },
   USER_NOT_FOUND: {
     code: 18,
-    message: "User {userId} not found",
+    message: "Utilisateur {userId} non trouvé",
     type: "USER_NOT_FOUND",
   },
   RESET_SUCCESS: {
     code: 23,
-    message: "Reset password email sent successfully for {email}",
+    message: "Email de réinitialisation de mot de passe envoyé avec succès pour {email}",
     type: "RESET_SUCCESS",
   },
   RESET_ERROR_GENERIC: {
     code: 24,
     message:
-      "Reset password email sent successfully for {email} with error {error}",
+      "Email de réinitialisation de mot de passe envoyé avec erreur {error} pour {email}",
     type: "RESET_ERROR_GENERIC",
   },
   RESET_PASSWORD_SUCCESS: {
     code: 25,
-    message: "Password has changed successfully for {user}",
+    message: "Le mot de passe a été modifié avec succès pour {user}",
     type: "RESET_PASSWORD_SUCCESS",
   },
 
   REGISTER_SUCCESS: {
     code: 26,
     message:
-      'User "{email} : {lastName} {firstName}" has registered successfully.',
+      'L\'utilisateur "{email} : {lastName} {firstName}" s\'est inscrit avec succès.',
     type: "REGISTER_SUCCESS",
   },
   REGISTER_ERROR_GENERIC: {
     code: 27,
-    message: "Error occurred while registering user '{email}': {error}",
+    message: "Une erreur s'est produite lors de l'inscription de l'utilisateur '{email}': {error}",
     type: "REGISTER_ERROR_GENERIC",
   },
   REGISTER_ERROR_INVALID_INPUT: {
     code: 28,
-    message: "Invalid input for Register : {input}",
+    message: "Entrée invalide pour l'inscription : {input}",
     type: "REGISTER_ERROR_INVALID_INPUT",
   },
   REGISTER_ERROR_EMAIL_EXIST: {
     code: 29,
-    message: "Failed to register email already exist {email}.",
+    message: "Échec de l'inscription l'email existe déjà {email}.",
     type: "REGISTER_ERROR_EMAIL_EXIST",
   },
   REGISTER_ERROR_PASSWORD: {
     code: 31,
-    message: "Password doesn't meet the requirements.",
+    message: "Le mot de passe ne respecte pas les exigences.",
     type: "REGISTER_ERROR_PASSWORD",
   },
   USER_ISN_T_ENABLED: {
     code: 32,
-    message: "User isn't enabled to do this action.",
+    message: "L'utilisateur n'est pas autorisé à effectuer cette action.",
     type: "USER_ISN_T_ENABLED",
   },
   AUTH_ERROR_GENERIC: {
     code: 33,
-    message: "Error occurred while authenticating user '{email}': {error}",
+    message: "Une erreur s'est produite lors de l'authentification de l'utilisateur '{email}': {error}",
     type: "AUTH_ERROR_GENERIC",
   },
+  LOGOUT_ERROR_GENERIC:{
+    code: 34,
+    message: "Une erreur s'est produite lors de la déconnexion de l'utilisateur '{email}': {error}",
+    type: "LOGOUT_ERROR_GENERIC",
+  }
 } as const;
 
 export default authLogs;
