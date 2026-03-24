@@ -243,4 +243,62 @@ export class GestionFichierService {
       );
     }
   }
+
+  static async moveFile(
+    user: UserD,
+    fileId: string,
+    newFolderId?: string
+  ): Promise<ResponseT> {
+    try {
+      const userId = user._id!.toString();
+      const file = await this.findOwnedFile(userId, fileId);
+
+      if (!file) {
+        return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
+      }
+
+      const targetFolder = await this.findOwnedFolderOrNull(userId, newFolderId);
+
+      if (newFolderId && !targetFolder) {
+        return new ErrorResponseC(
+          "Le dossier cible est introuvable",
+          HttpCodes.NotFound.code,
+          null
+        );
+      }
+
+      const oldAbsolutePath = path.join(getUserStorageRoot(userId), file.path);
+      const targetDirectory = resolveFolderAbsolutePath(userId, targetFolder?.storagePath);
+      await ensureDirectoryExists(targetDirectory);
+
+      const newAbsolutePath = path.join(targetDirectory, path.basename(file.path));
+      await fs.rename(oldAbsolutePath, newAbsolutePath);
+
+      const newRelativePath = path.relative(getUserStorageRoot(userId), newAbsolutePath);
+
+      const updatedFile = await FichierModel.findByIdAndUpdate(
+        file._id,
+        {
+          folderId: targetFolder ? targetFolder._id : null,
+          path: newRelativePath,
+        },
+        { new: true }
+      );
+
+      return new SuccessResponseC(
+        "success",
+        {
+          file: this.serializeFile(updatedFile!),
+        },
+        "Fichier déplacé avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors du déplacement du fichier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
 }

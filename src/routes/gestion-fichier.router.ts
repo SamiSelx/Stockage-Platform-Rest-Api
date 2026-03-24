@@ -4,6 +4,7 @@ import {
   supprimerFichier,
   telechargerFichier,
   televerserFichier,
+  deplacerFichier,
 } from "../controller/gestion-fichier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { uploadFichierMiddleware } from "../middleware/gestion-fichier.middleware";
@@ -14,6 +15,7 @@ import {
   suppressionFichierValidators,
   telechargementFichierValidators,
   uploadFichierValidators,
+  deplacementFichierValidators,
 } from "../services/gestion-fichier/gestion-fichier.validator";
 
 const gestionFichierRouter = Router();
@@ -56,6 +58,15 @@ gestionFichierRouter.delete(
   suppressionFichierValidators,
   validator,
   supprimerFichier
+);
+
+gestionFichierRouter.patch(
+  "/file/:id/move",
+  checkLogs,
+  isLoggedIn,
+  deplacementFichierValidators,
+  validator,
+  deplacerFichier
 );
 
 export default gestionFichierRouter;

@@ -17,3 +17,8 @@ export const telechargementFichierValidators = [
 export const suppressionFichierValidators = [
   param("id").isMongoId().withMessage("L'identifiant du fichier est invalide"),
 ];
+
+export const deplacementFichierValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du fichier est invalide"),
+  maybeMongoId("folderId", "body"),
+];

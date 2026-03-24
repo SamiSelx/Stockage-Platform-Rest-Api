@@ -61,3 +61,17 @@ export async function supprimerFichier(req: MyRequest<UserD>, res: Response) {
     return ErrorResponse(res, result.code, result.message, result.error);
   }
 }
+
+export async function deplacerFichier(req: MyRequest<UserD>, res: Response) {
+  const { id } = req.params;
+  const { folderId } = req.body as { folderId?: string };
+  const result = await GestionFichierService.moveFile(req.user as UserD, id, folderId);
+
+  if (result instanceof SuccessResponseC) {
+    return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  }
+
+  if (result instanceof ErrorResponseC) {
+    return ErrorResponse(res, result.code, result.message, result.error);
+  }
+}
