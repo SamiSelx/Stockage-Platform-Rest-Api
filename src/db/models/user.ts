@@ -22,6 +22,10 @@ const usersSchema = new Schema<UserI>(
     password: { type: String, required },
     role: { type: String, enum: ["admin", "user"], default: "user" },
     enable: { type: Boolean, default: true },
+    // Espace réellement utilisé par les fichiers de l'utilisateur.
+    storageUsed: { type: Number, default: 0 },
+    // Quota par défaut pour l'instant : 1 Go.
+    storageLimit: { type: Number, default: 1024 * 1024 * 1024 },
   },
   {
     timestamps: true,
