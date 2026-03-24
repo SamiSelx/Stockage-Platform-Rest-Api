@@ -7,6 +7,6 @@ import gestionDossierRouter from "./gestion-dossier.router";
 export default function SetRouters(app: Application) {
   app.use("/", indexRouter);
   app.use("/auth", authRouter);
-  app.use("/", gestionFichierRouter);
-  app.use("/", gestionDossierRouter);
+  app.use("/file", gestionFichierRouter);
+  app.use("/folder", gestionDossierRouter);
 }
