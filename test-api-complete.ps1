@@ -184,6 +184,27 @@ if ($fileId) {
     Test-Endpoint "GET" "$baseUrl/download/$fileId" $null $token "Download File" | Out-Null
 }
 
+# Move File to Folder
+if ($fileId -and $parentFolderId) {
+    $moveFileBody = @{
+        folderId = $parentFolderId
+    }
+    
+    $moveFileResponse = Test-Endpoint "PATCH" "$baseUrl/file/$fileId/move" $moveFileBody $token "Move File to Folder"
+    
+    if ($null -ne $moveFileResponse) {
+        $moveData = $moveFileResponse.Content | ConvertFrom-Json
+        Write-Host "File moved to folder. New folderId: $($moveData.data.file.folderId)`n" -ForegroundColor Green
+    }
+}
+
+# Move File back to Root
+if ($fileId) {
+    $moveFileRootBody = @{}
+    
+    Test-Endpoint "PATCH" "$baseUrl/file/$fileId/move" $moveFileRootBody $token "Move File back to Root" | Out-Null
+}
+
 # Delete File (files.deleteOne)
 if ($fileId) {
     Test-Endpoint "DELETE" "$baseUrl/file/$fileId" $null $token "Delete File" | Out-Null
@@ -217,6 +238,8 @@ Write-Host "  [OK] List Folders" -ForegroundColor Green
 Write-Host "  [OK] Upload File (files.insertOne)" -ForegroundColor Green
 Write-Host "  [OK] List Files" -ForegroundColor Green
 Write-Host "  [OK] Download File (files.findOne)" -ForegroundColor Green
+Write-Host "  [OK] Move File to Folder (files.updateOne - folderId)" -ForegroundColor Green
+Write-Host "  [OK] Move File back to Root (files.updateOne - folderId null)" -ForegroundColor Green
 Write-Host "  [OK] Delete File (files.deleteOne)" -ForegroundColor Green
 Write-Host "  [OK] Delete Folder" -ForegroundColor Green
 Write-Host "  [OK] User Logout" -ForegroundColor Green
