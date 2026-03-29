@@ -23,3 +23,7 @@ export const listeDossiersValidators = [maybeMongoId("parentFolder", "query")];
 export const suppressionDossierValidators = [
   param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
 ];
+
+export const getFolderByIdValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
+];

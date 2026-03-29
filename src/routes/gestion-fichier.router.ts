@@ -33,7 +33,7 @@ gestionFichierRouter.post(
 );
 
 gestionFichierRouter.get(
-  "/files",
+  "/",
   checkLogs,
   isLoggedIn,
   normaliserNavigationStockage,
@@ -52,7 +52,7 @@ gestionFichierRouter.get(
 );
 
 gestionFichierRouter.delete(
-  "/file/:id",
+  "/:id",
   checkLogs,
   isLoggedIn,
   suppressionFichierValidators,
@@ -61,12 +61,14 @@ gestionFichierRouter.delete(
 );
 
 gestionFichierRouter.patch(
-  "/file/:id/move",
+  "/:id/move",
   checkLogs,
   isLoggedIn,
   deplacementFichierValidators,
   validator,
   deplacerFichier
 );
+
+// Add delete file
 
 export default gestionFichierRouter;

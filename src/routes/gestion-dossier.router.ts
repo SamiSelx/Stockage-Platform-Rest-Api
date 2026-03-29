@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { creerDossier, listerDossiers, supprimerDossier } from "../controller/gestion-dossier.controller";
+import { creerDossier, getFolderById, listerDossiers, supprimerDossier } from "../controller/gestion-dossier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { normaliserNavigationStockage } from "../middleware/navigation-stockage.middleware";
 import { validator } from "../middleware/validator";
 import {
   creationDossierValidators,
+  getFolderByIdValidators,
   listeDossiersValidators,
   suppressionDossierValidators,
 } from "../services/gestion-dossier/gestion-dossier.validator";
@@ -13,7 +14,7 @@ const gestionDossierRouter = Router();
 
 // Gestion des dossiers
 gestionDossierRouter.post(
-  "/folder",
+  "/",
   checkLogs,
   isLoggedIn,
   normaliserNavigationStockage,
@@ -23,7 +24,7 @@ gestionDossierRouter.post(
 );
 
 gestionDossierRouter.get(
-  "/folders",
+  "/",
   checkLogs,
   isLoggedIn,
   normaliserNavigationStockage,
@@ -32,8 +33,18 @@ gestionDossierRouter.get(
   listerDossiers
 );
 
+gestionDossierRouter.get(
+  "/:id",
+  checkLogs,
+  isLoggedIn,
+  normaliserNavigationStockage,
+  getFolderByIdValidators,
+  validator,
+  getFolderById,
+)
+
 gestionDossierRouter.delete(
-  "/folder/:id",
+  "/:id",
   checkLogs,
   isLoggedIn,
   suppressionDossierValidators,

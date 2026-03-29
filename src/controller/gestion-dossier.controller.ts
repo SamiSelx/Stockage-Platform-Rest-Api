@@ -31,6 +31,19 @@ export async function listerDossiers(req: MyRequest<UserD>, res: Response) {
   }
 }
 
+export async function getFolderById(req: MyRequest<UserD>, res: Response) {
+  const { id } = req.params;
+  const result = await GestionDossierService.executeGetFolderById(req.user as UserD, id);
+
+  if (result instanceof SuccessResponseC) {
+    return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  }
+
+  if (result instanceof ErrorResponseC) {
+    return ErrorResponse(res, result.code, result.message, result.error);
+  }
+}
+
 export async function supprimerDossier(req: MyRequest<UserD>, res: Response) {
   const { id } = req.params;
   const result = await GestionDossierService.deleteFolder(req.user as UserD, id);
