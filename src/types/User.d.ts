@@ -10,6 +10,8 @@ declare interface UserI  extends UserAuthI{
 	lastName: string;
     role: "admin" | "user" ;
     enable: boolean;
+    storageUsed: number;
+    storageLimit: number;
 }
 
 
