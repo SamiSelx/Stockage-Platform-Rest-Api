@@ -16,9 +16,30 @@ import {
 } from "../../utils/stockage";
 
 export class GestionFichierService {
+  private static detectFileType(file: Pick<FichierD, "filename" | "mimetype">) {
+    const mimetype = file.mimetype || "";
+    const extension = path.extname(file.filename || "").toLowerCase();
+
+    if (mimetype.includes("pdf") || extension === ".pdf") return "pdf";
+    if (mimetype.startsWith("image/") || [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"].includes(extension)) return "image";
+    if (mimetype.startsWith("video/") || [".mp4", ".mov", ".avi", ".mkv", ".webm"].includes(extension)) return "video";
+    if (mimetype.startsWith("audio/") || [".mp3", ".wav", ".aac", ".ogg"].includes(extension)) return "audio";
+    if (
+      mimetype.includes("sheet") ||
+      mimetype.includes("excel") ||
+      [".xls", ".xlsx", ".csv"].includes(extension)
+    ) {
+      return "spreadsheet";
+    }
+
+    return "document";
+  }
+
   private static serializeFile(file: FichierD) {
     return {
+      _id: file._id,
       id: file._id,
+      name: file.filename,
       filename: file.filename,
       encryptedFilename: file.encryptedFilename,
       size: file.size,
@@ -26,26 +47,52 @@ export class GestionFichierService {
       owner: file.owner,
       folderId: file.folderId,
       mimetype: file.mimetype,
+      type: this.detectFileType(file),
+      isArchived: file.isArchived,
+      archivedAt: file.archivedAt,
+      isStarred: file.isStarred,
+      lastOpenedAt: file.lastOpenedAt,
+      openedCount: file.openedCount,
       createdAt: file.createdAt,
       updatedAt: file.updatedAt,
-      downloadUrl: `/download/${file._id}`,
+      downloadUrl: `/file/download/${file._id}`,
     };
   }
 
-  private static async findOwnedFolderOrNull(userId: string, folderId?: string) {
+  private static async findOwnedFolderOrNull(
+    userId: string,
+    folderId?: string,
+    options?: { includeArchived?: boolean }
+  ) {
     if (!folderId) return null;
 
-    return DossierModel.findOne({
+    const query: Record<string, unknown> = {
       _id: folderId,
       owner: new Types.ObjectId(userId),
-    });
+    };
+
+    if (!options?.includeArchived) {
+      query.isArchived = false;
+    }
+
+    return DossierModel.findOne(query);
   }
 
-  private static async findOwnedFile(userId: string, fileId: string) {
-    return FichierModel.findOne({
+  private static async findOwnedFile(
+    userId: string,
+    fileId: string,
+    options?: { includeArchived?: boolean }
+  ) {
+    const query: Record<string, unknown> = {
       _id: fileId,
       owner: new Types.ObjectId(userId),
-    });
+    };
+
+    if (!options?.includeArchived) {
+      query.isArchived = false;
+    }
+
+    return FichierModel.findOne(query);
   }
 
   static async uploadFile(
@@ -97,24 +144,27 @@ export class GestionFichierService {
       const relativePath = path.relative(getUserStorageRoot(userId), finalAbsolutePath);
       const createdFile = await FichierModel.create({
         filename: file.originalname,
-        // Pas encore de chiffrement 
         encryptedFilename: storedFileName,
         size: file.size,
         path: relativePath,
         owner: user._id,
         folderId: targetFolder ? targetFolder._id : null,
         mimetype: file.mimetype,
+        isArchived: false,
+        isStarred: false,
       });
 
-      await UserModel.updateOne({ _id: user._id }, { $inc: { storageUsed: file.size } });
+      const updatedStorageUsed = user.storageUsed + file.size;
+      await UserModel.updateOne({ _id: user._id }, { $set: { storageUsed: updatedStorageUsed } });
 
       return new SuccessResponseC(
         "success",
         {
           file: this.serializeFile(createdFile),
           storage: {
-            storageUsed: user.storageUsed + file.size,
+            storageUsed: updatedStorageUsed,
             storageLimit: user.storageLimit,
+            storageRemaining: Math.max(0, user.storageLimit - updatedStorageUsed),
           },
         },
         "Fichier téléversé avec succès",
@@ -148,9 +198,12 @@ export class GestionFichierService {
         );
       }
 
+      const freshUser = await UserModel.findById(user._id);
+
       const files = await FichierModel.find({
         owner: user._id,
         folderId: targetFolder ? targetFolder._id : null,
+        isArchived: false,
       }).sort({ createdAt: -1 });
 
       return new SuccessResponseC(
@@ -165,8 +218,12 @@ export class GestionFichierService {
             : null,
           files: files.map((file) => this.serializeFile(file)),
           storage: {
-            storageUsed: user.storageUsed,
-            storageLimit: user.storageLimit,
+            storageUsed: freshUser?.storageUsed ?? user.storageUsed,
+            storageLimit: freshUser?.storageLimit ?? user.storageLimit,
+            storageRemaining: Math.max(
+              0,
+              (freshUser?.storageLimit ?? user.storageLimit) - (freshUser?.storageUsed ?? user.storageUsed)
+            ),
           },
         },
         "Liste des fichiers récupérée avec succès",
@@ -192,6 +249,15 @@ export class GestionFichierService {
       const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
       await fs.access(absoluteFilePath);
 
+      const openedAt = new Date();
+      await FichierModel.updateOne(
+        { _id: file._id, owner: user._id },
+        { $set: { lastOpenedAt: openedAt }, $inc: { openedCount: 1 } }
+      );
+
+      file.lastOpenedAt = openedAt;
+      file.openedCount = (file.openedCount || 0) + 1;
+
       return new SuccessResponseC(
         "success",
         {
@@ -210,7 +276,7 @@ export class GestionFichierService {
     }
   }
 
-  static async deleteFile(user: UserD, fileId: string): Promise<ResponseT> {
+  static async archiveFile(user: UserD, fileId: string): Promise<ResponseT> {
     try {
       const file = await this.findOwnedFile(user._id!.toString(), fileId);
 
@@ -218,12 +284,92 @@ export class GestionFichierService {
         return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
       }
 
+      const archivedAt = new Date();
+      const updatedFile = await FichierModel.findByIdAndUpdate(
+        file._id,
+        { $set: { isArchived: true, archivedAt } },
+        { new: true }
+      );
+
+      return new SuccessResponseC(
+        "success",
+        {
+          file: this.serializeFile(updatedFile as FichierD),
+        },
+        "Fichier déplacé vers la corbeille avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de l'archivage du fichier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async restoreFile(user: UserD, fileId: string): Promise<ResponseT> {
+    try {
+      const file = await this.findOwnedFile(user._id!.toString(), fileId, { includeArchived: true });
+
+      if (!file || !file.isArchived) {
+        return new ErrorResponseC("Fichier introuvable dans la corbeille", HttpCodes.NotFound.code, null);
+      }
+
+      if (file.folderId) {
+        const parentFolder = await DossierModel.findOne({ _id: file.folderId, owner: user._id });
+        if (parentFolder?.isArchived) {
+          return new ErrorResponseC(
+            "Impossible de restaurer ce fichier tant que son dossier parent est dans la corbeille",
+            HttpCodes.Conflict.code,
+            null
+          );
+        }
+      }
+
+      const updatedFile = await FichierModel.findByIdAndUpdate(
+        file._id,
+        { $set: { isArchived: false, archivedAt: null } },
+        { new: true }
+      );
+
+      return new SuccessResponseC(
+        "success",
+        {
+          file: this.serializeFile(updatedFile as FichierD),
+        },
+        "Fichier restauré avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la restauration du fichier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async deleteFilePermanently(user: UserD, fileId: string): Promise<ResponseT> {
+    try {
+      const file = await this.findOwnedFile(user._id!.toString(), fileId, { includeArchived: true });
+
+      if (!file || !file.isArchived) {
+        return new ErrorResponseC(
+          "Fichier introuvable dans la corbeille",
+          HttpCodes.NotFound.code,
+          null
+        );
+      }
+
       const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
       await deleteFileIfExists(absoluteFilePath);
       await FichierModel.deleteOne({ _id: file._id, owner: user._id });
+
+      const nextStorageUsed = Math.max(0, user.storageUsed - file.size);
       await UserModel.updateOne(
         { _id: user._id },
-        { $set: { storageUsed: Math.max(0, user.storageUsed - file.size) } }
+        { $set: { storageUsed: nextStorageUsed } }
       );
 
       return new SuccessResponseC(
@@ -231,13 +377,18 @@ export class GestionFichierService {
         {
           deletedFileId: fileId,
           releasedSize: file.size,
+          storage: {
+            storageUsed: nextStorageUsed,
+            storageLimit: user.storageLimit,
+            storageRemaining: Math.max(0, user.storageLimit - nextStorageUsed),
+          },
         },
-        "Fichier supprimé avec succès",
+        "Fichier supprimé définitivement avec succès",
         HttpCodes.OK.code
       );
     } catch (error) {
       return new ErrorResponseC(
-        "Erreur lors de la suppression du fichier",
+        "Erreur lors de la suppression définitive du fichier",
         HttpCodes.InternalServerError.code,
         error
       );
@@ -288,7 +439,7 @@ export class GestionFichierService {
       return new SuccessResponseC(
         "success",
         {
-          file: this.serializeFile(updatedFile!),
+          file: this.serializeFile(updatedFile as FichierD),
         },
         "Fichier déplacé avec succès",
         HttpCodes.OK.code
@@ -296,6 +447,179 @@ export class GestionFichierService {
     } catch (error) {
       return new ErrorResponseC(
         "Erreur lors du déplacement du fichier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async getStatistics(user: UserD): Promise<ResponseT> {
+    try {
+      const freshUser = await UserModel.findById(user._id);
+      const owner = new Types.ObjectId(user._id!.toString());
+
+      const [
+        totalFiles,
+        totalFolders,
+        archivedFiles,
+        archivedFolders,
+        starredFiles,
+        openedFiles,
+      ] = await Promise.all([
+        FichierModel.countDocuments({ owner, isArchived: false }),
+        DossierModel.countDocuments({ owner, isArchived: false }),
+        FichierModel.countDocuments({ owner, isArchived: true }),
+        DossierModel.countDocuments({ owner, isArchived: true }),
+        FichierModel.countDocuments({ owner, isArchived: false, isStarred: true }),
+        FichierModel.countDocuments({ owner, isArchived: false, lastOpenedAt: { $ne: null } }),
+      ]);
+
+      const storageUsed = freshUser?.storageUsed ?? user.storageUsed;
+      const storageLimit = freshUser?.storageLimit ?? user.storageLimit;
+
+      return new SuccessResponseC(
+        "success",
+        {
+          totalFiles,
+          totalFolders,
+          archivedFiles,
+          archivedFolders,
+          starredFiles,
+          openedFiles,
+          storage: {
+            used: storageUsed,
+            total: storageLimit,
+            remaining: Math.max(0, storageLimit - storageUsed),
+          },
+        },
+        "Statistiques du dashboard récupérées avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la récupération des statistiques",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async getRecentFiles(user: UserD, limit = 10): Promise<ResponseT> {
+    try {
+      const normalizedLimit = Math.min(Math.max(Number(limit) || 10, 1), 50);
+      let files = await FichierModel.find({ owner: user._id, isArchived: false })
+        .sort({ lastOpenedAt: -1, updatedAt: -1 })
+        .limit(normalizedLimit);
+
+      if (files.every((file) => !file.lastOpenedAt)) {
+        files = await FichierModel.find({ owner: user._id, isArchived: false })
+          .sort({ updatedAt: -1 })
+          .limit(normalizedLimit);
+      }
+
+      return new SuccessResponseC(
+        "success",
+        {
+          files: files.map((file) => this.serializeFile(file)),
+        },
+        "Fichiers récents récupérés avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la récupération des fichiers récents",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async listTrashFiles(user: UserD): Promise<ResponseT> {
+    try {
+      const archivedFiles = await FichierModel.find({ owner: user._id, isArchived: true }).sort({ archivedAt: -1 });
+      const folderIds = archivedFiles
+        .map((file) => file.folderId?.toString())
+        .filter((value): value is string => Boolean(value));
+
+      const folders = folderIds.length
+        ? await DossierModel.find({ _id: { $in: folderIds }, owner: user._id })
+        : [];
+      const archivedFolderIds = new Set(
+        folders.filter((folder) => folder.isArchived).map((folder) => folder._id.toString())
+      );
+
+      const visibleTrashFiles = archivedFiles.filter((file) => {
+        if (!file.folderId) return true;
+        return !archivedFolderIds.has(file.folderId.toString());
+      });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          files: visibleTrashFiles.map((file) => this.serializeFile(file)),
+        },
+        "Corbeille des fichiers récupérée avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la récupération de la corbeille des fichiers",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async setStarredFile(user: UserD, fileId: string, starred: boolean): Promise<ResponseT> {
+    try {
+      const file = await this.findOwnedFile(user._id!.toString(), fileId);
+
+      if (!file) {
+        return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
+      }
+
+      const updatedFile = await FichierModel.findByIdAndUpdate(
+        file._id,
+        { $set: { isStarred: Boolean(starred) } },
+        { new: true }
+      );
+
+      return new SuccessResponseC(
+        "success",
+        {
+          file: this.serializeFile(updatedFile as FichierD),
+        },
+        starred ? "Fichier ajouté aux favoris" : "Fichier retiré des favoris",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la mise à jour du favori",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async listStarredFiles(user: UserD): Promise<ResponseT> {
+    try {
+      const files = await FichierModel.find({
+        owner: user._id,
+        isArchived: false,
+        isStarred: true,
+      }).sort({ updatedAt: -1 });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          files: files.map((file) => this.serializeFile(file)),
+        },
+        "Fichiers favoris récupérés avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la récupération des favoris",
         HttpCodes.InternalServerError.code,
         error
       );

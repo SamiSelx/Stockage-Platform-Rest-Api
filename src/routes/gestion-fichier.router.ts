@@ -1,26 +1,36 @@
 import { Router } from "express";
 import {
+  deplacerFichier,
+  getRecentFiles,
+  getStarredFiles,
+  getStatistics,
+  getTrashFiles,
   listerFichiers,
+  restaurerFichier,
+  setStarredFile,
   supprimerFichier,
+  supprimerFichierDefinitivement,
   telechargerFichier,
   televerserFichier,
-  deplacerFichier,
 } from "../controller/gestion-fichier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { uploadFichierMiddleware } from "../middleware/gestion-fichier.middleware";
 import { normaliserNavigationStockage } from "../middleware/navigation-stockage.middleware";
 import { validator } from "../middleware/validator";
 import {
+  deplacementFichierValidators,
   listeFichiersValidators,
+  recentFilesValidators,
+  restaurationFichierValidators,
+  starredFileValidators,
+  suppressionDefinitiveFichierValidators,
   suppressionFichierValidators,
   telechargementFichierValidators,
   uploadFichierValidators,
-  deplacementFichierValidators,
 } from "../services/gestion-fichier/gestion-fichier.validator";
 
 const gestionFichierRouter = Router();
 
-// Gestion des fichiers 
 gestionFichierRouter.post(
   "/upload",
   checkLogs,
@@ -43,6 +53,36 @@ gestionFichierRouter.get(
 );
 
 gestionFichierRouter.get(
+  "/statistics",
+  checkLogs,
+  isLoggedIn,
+  getStatistics
+);
+
+gestionFichierRouter.get(
+  "/recent",
+  checkLogs,
+  isLoggedIn,
+  recentFilesValidators,
+  validator,
+  getRecentFiles
+);
+
+gestionFichierRouter.get(
+  "/trash",
+  checkLogs,
+  isLoggedIn,
+  getTrashFiles
+);
+
+gestionFichierRouter.get(
+  "/starred",
+  checkLogs,
+  isLoggedIn,
+  getStarredFiles
+);
+
+gestionFichierRouter.get(
   "/download/:id",
   checkLogs,
   isLoggedIn,
@@ -51,13 +91,22 @@ gestionFichierRouter.get(
   telechargerFichier
 );
 
-gestionFichierRouter.delete(
-  "/:id",
+gestionFichierRouter.patch(
+  "/:id/star",
   checkLogs,
   isLoggedIn,
-  suppressionFichierValidators,
+  starredFileValidators,
   validator,
-  supprimerFichier
+  setStarredFile
+);
+
+gestionFichierRouter.patch(
+  "/:id/restore",
+  checkLogs,
+  isLoggedIn,
+  restaurationFichierValidators,
+  validator,
+  restaurerFichier
 );
 
 gestionFichierRouter.patch(
@@ -69,6 +118,22 @@ gestionFichierRouter.patch(
   deplacerFichier
 );
 
-// Add delete file
+gestionFichierRouter.delete(
+  "/:id/permanent",
+  checkLogs,
+  isLoggedIn,
+  suppressionDefinitiveFichierValidators,
+  validator,
+  supprimerFichierDefinitivement
+);
+
+gestionFichierRouter.delete(
+  "/:id",
+  checkLogs,
+  isLoggedIn,
+  suppressionFichierValidators,
+  validator,
+  supprimerFichier
+);
 
 export default gestionFichierRouter;

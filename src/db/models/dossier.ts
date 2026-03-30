@@ -5,6 +5,8 @@ export interface DossierI {
   owner: Types.ObjectId;
   parentFolder?: Types.ObjectId | null;
   storagePath: string;
+  isArchived?: boolean;
+  archivedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -22,13 +24,14 @@ const dossierSchema = new Schema<DossierI>(
       default: null,
       index: true,
     },
-    // Chemin relatif sous le dossier de stockage de l'utilisateur.
     storagePath: { type: String, required: true },
+    isArchived: { type: Boolean, default: false, index: true },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// Empêche deux dossiers du même nom dans le même niveau.
 dossierSchema.index({ owner: 1, parentFolder: 1, name: 1 }, { unique: true });
+dossierSchema.index({ owner: 1, isArchived: 1, parentFolder: 1, createdAt: -1 });
 
 export const DossierModel = model<DossierI, DossierModelI>("Folders", dossierSchema);
