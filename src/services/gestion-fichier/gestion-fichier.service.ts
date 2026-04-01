@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 import { Types } from "mongoose";
 import { HttpCodes } from "../../config/Errors";
 import { DossierModel } from "../../db/models/dossier";
@@ -9,11 +10,13 @@ import { ErrorResponseC, SuccessResponseC } from "../services.response";
 import {
   createStoredFileName,
   deleteFileIfExists,
+  // deleteFileIfExists,
   ensureDirectoryExists,
   ensureUserStorageRoot,
   getUserStorageRoot,
   resolveFolderAbsolutePath,
 } from "../../utils/stockage";
+import { UploadedFile } from "../../controller/gestion-fichier.controller";
 
 export class GestionFichierService {
   private static serializeFile(file: FichierD) {
@@ -29,6 +32,9 @@ export class GestionFichierService {
       createdAt: file.createdAt,
       updatedAt: file.updatedAt,
       downloadUrl: `/download/${file._id}`,
+      encryptedFK: file.encryptedFK,
+      file_iv: file.file_iv,
+      fk_iv: file.fk_iv,
     };
   }
 
@@ -48,9 +54,129 @@ export class GestionFichierService {
     });
   }
 
+
+// static async uploadFile(
+//   user: UserD,
+//   file: UploadedFile,
+//   folderId?: string
+// ): Promise<ResponseT> {
+
+//   if (!file || !file.encryptedData) {
+//     return new ErrorResponseC(
+//       "Aucun fichier chiffré n'a été envoyé",
+//       HttpCodes.BadRequest.code,
+//       null
+//     );
+//   }
+
+//   let finalAbsolutePath: string | null = null;
+
+//   try {
+
+//     const userId = user._id!.toString();
+
+//     const targetFolder = await this.findOwnedFolderOrNull(userId, folderId);
+
+//     if (folderId && !targetFolder) {
+//       // Si le dossier cible n'existe pas, on supprime le fichier temporaire (s'il existe) pour éviter les fuites de stockage
+//        await deleteFileIfExists(file.path);
+//       return new ErrorResponseC(
+//         "Le dossier cible est introuvable",
+//         HttpCodes.NotFound.code,
+//         null
+//       );
+//     }
+
+//     if (user.storageUsed + file.size > user.storageLimit) {
+      
+//       return new ErrorResponseC(
+//         "Quota de stockage dépassé",
+//         HttpCodes.PayloadTooLarge.code,
+//         {
+//           storageUsed: user.storageUsed,
+//           storageLimit: user.storageLimit,
+//           requestedSize: file.size,
+//         }
+//       );
+//     }
+
+//     // Ensure user storage root
+//     await ensureUserStorageRoot(userId);
+
+//     const targetDirectory = resolveFolderAbsolutePath(
+//       userId,
+//       targetFolder?.storagePath
+//     );
+
+//     await ensureDirectoryExists(targetDirectory);
+
+//     // Generate secure filename
+//     const randomId = crypto.randomBytes(16).toString("hex");
+
+//     const storedFileName = `${randomId}.enc`;
+
+//     finalAbsolutePath = path.join(targetDirectory, storedFileName);
+
+//     // Write encrypted file
+//     await fs.writeFile(finalAbsolutePath, file.encryptedData);
+
+//     // Create relative path for DB
+//     const relativePath = path.relative(
+//       getUserStorageRoot(userId),
+//       finalAbsolutePath
+//     );
+
+//     const createdFile = await FichierModel.create({
+//       filename: file.originalname,
+//       encryptedFK: file.encryptedFK,
+//       file_iv: file.file_iv,
+//       fk_iv: file.fk_iv,
+//       encryptedFilename: storedFileName,
+//       size: file.size,
+//       path: relativePath,
+//       owner: user._id,
+//       folderId: targetFolder ? targetFolder._id : null,
+//       mimetype: file.mimetype,
+//     });
+
+//     await UserModel.updateOne(
+//       { _id: user._id },
+//       { $inc: { storageUsed: file.size } }
+//     );
+
+//     return new SuccessResponseC(
+//       "success",
+//       {
+//         file: this.serializeFile(createdFile),
+//         storage: {
+//           storageUsed: user.storageUsed + file.size,
+//           storageLimit: user.storageLimit,
+//         },
+//       },
+//       "Fichier téléversé avec succès",
+//       HttpCodes.Created.code
+//     );
+
+//   } catch (error) {
+
+//     // cleanup corrupted file
+//     if (finalAbsolutePath) {
+//       try {
+//         await fs.unlink(finalAbsolutePath);
+//       } catch {}
+//     }
+
+//     return new ErrorResponseC(
+//       "Erreur lors du téléversement du fichier",
+//       HttpCodes.InternalServerError.code,
+//       error
+//     );
+//   }
+// }
+
   static async uploadFile(
     user: UserD,
-    file: Express.Multer.File | undefined,
+    file: UploadedFile,
     folderId?: string
   ): Promise<ResponseT> {
     if (!file) {
@@ -64,6 +190,7 @@ export class GestionFichierService {
       const targetFolder = await this.findOwnedFolderOrNull(userId, folderId);
 
       if (folderId && !targetFolder) {
+        // Si le dossier cible n'existe pas, on supprime le fichier temporaire (s'il existe) pour éviter les fuites de stockage
         await deleteFileIfExists(file.path);
         return new ErrorResponseC(
           "Le dossier cible est introuvable",
@@ -98,6 +225,9 @@ export class GestionFichierService {
       const createdFile = await FichierModel.create({
         filename: file.originalname,
         // Pas encore de chiffrement 
+        encryptedFK: file.encryptedFK,
+        file_iv: file.file_iv,
+        fk_iv: file.fk_iv,
         encryptedFilename: storedFileName,
         size: file.size,
         path: relativePath,
@@ -148,10 +278,28 @@ export class GestionFichierService {
         );
       }
 
-      const files = await FichierModel.find({
-        owner: user._id,
-        folderId: targetFolder ? targetFolder._id : null,
-      }).sort({ createdAt: -1 });
+      const files = await FichierModel.aggregate([
+          {
+            $match: {
+              owner: user._id,
+              folderId: targetFolder ? targetFolder._id : null,
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+            },
+          },
+          {
+            $unwind: "$owner",
+          },
+          {
+            $sort: { createdAt: -1 },
+          },
+        ]);
 
       return new SuccessResponseC(
         "success",
@@ -188,19 +336,36 @@ export class GestionFichierService {
       if (!file) {
         return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
       }
+      
 
       const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
       await fs.access(absoluteFilePath);
+      console.log("file path:", absoluteFilePath, file.path);
+
+      // Read encrypted file from disk
+      // const encryptedBuffer = await fs.readFile(absoluteFilePath);
+
+      // Convert to base64 (can be decoded to Uint8Array on frontend)
+      // const encryptedBase64 = encryptedBuffer.toString("base64");
 
       return new SuccessResponseC(
-        "success",
-        {
-          file: this.serializeFile(file),
-          absoluteFilePath,
-        },
-        "Fichier prêt pour le téléchargement",
-        HttpCodes.OK.code
-      );
+      "success",
+      {
+        file: this.serializeFile(file),
+        filePath: absoluteFilePath, // not exposed publicly, used internally
+      },
+      "Fichier prêt pour le téléchargement",
+      HttpCodes.OK.code
+    );
+      // return new SuccessResponseC(
+      //   "success",
+      //   {
+      //     file: this.serializeFile(file),
+      //     encryptedData: encryptedBase64,
+      //   },
+      //   "Fichier prêt pour le téléchargement",
+      //   HttpCodes.OK.code
+      // );
     } catch (error) {
       return new ErrorResponseC(
         "Impossible de préparer le téléchargement",
@@ -219,7 +384,7 @@ export class GestionFichierService {
       }
 
       const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
-      await deleteFileIfExists(absoluteFilePath);
+      // await deleteFileIfExists(absoluteFilePath);
       await FichierModel.deleteOne({ _id: file._id, owner: user._id });
       await UserModel.updateOne(
         { _id: user._id },

@@ -12,6 +12,9 @@ declare interface UserI  extends UserAuthI{
     enable: boolean;
     storageUsed: number;
     storageLimit: number;
+    salt: string;
+    encryptedRMK: string;
+    rmk_iv: string;
 }
 
 

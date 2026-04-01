@@ -90,8 +90,13 @@ export class AuthServices {
     password: string,
     firstName: string,
     lastName: string,
+    salt: string,
+    encryptedRMK: string,
+    rmk_iv: string,
     stay: boolean,
-    res : Response
+    
+     res : Response,
+
   ): Promise<ResponseT> => {
     try {
       const userExist = await UserModel.findOne({
@@ -108,8 +113,10 @@ export class AuthServices {
           msg
         );
       }
-      const user = new UserModel({ email, password, firstName, lastName });
+      console.log("inside register - salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
+      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv });
       await user.save();
+      console.log("user ",user)
       const token = Sign({ _id: user._id.toString(), role: user.role });
       res.cookie("token", token, getCookiesSettings(stay));
       const resp: ICode<IAuthLogs> = authLogs.REGISTER_SUCCESS;
