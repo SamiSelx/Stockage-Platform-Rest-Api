@@ -12,6 +12,11 @@ export interface FichierI {
   owner: Types.ObjectId;
   folderId?: Types.ObjectId | null;
   mimetype?: string;
+  isArchived?: boolean;
+  archivedAt?: Date | null;
+  isStarred?: boolean;
+  lastOpenedAt?: Date | null;
+  openedCount?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -31,10 +36,16 @@ const fichierSchema = new Schema<FichierI>(
     owner: { type: Schema.Types.ObjectId, ref: "Users", required: true, index: true },
     folderId: { type: Schema.Types.ObjectId, ref: "Folders", default: null, index: true },
     mimetype: { type: String, default: "application/octet-stream" },
+    isArchived: { type: Boolean, default: false, index: true },
+    archivedAt: { type: Date, default: null },
+    isStarred: { type: Boolean, default: false, index: true },
+    lastOpenedAt: { type: Date, default: null, index: true },
+    openedCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
 fichierSchema.index({ owner: 1, folderId: 1, filename: 1, createdAt: -1 });
+fichierSchema.index({ owner: 1, isArchived: 1, isStarred: 1 });
 
 export const FichierModel = model<FichierI, FichierModelI>("Files", fichierSchema);
