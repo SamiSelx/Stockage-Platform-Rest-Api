@@ -28,6 +28,7 @@ import {
   telechargementFichierValidators,
   uploadFichierValidators,
 } from "../services/gestion-fichier/gestion-fichier.validator";
+import upload from "../middleware/file";
 
 const gestionFichierRouter = Router();
 
