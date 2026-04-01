@@ -3,6 +3,10 @@ import { Document, Model, Schema, Types, model } from "mongoose";
 export interface FichierI {
   filename: string;
   encryptedFilename: string;
+  // encryptedData: Buffer;
+  encryptedFK: string;
+  file_iv: string;
+  fk_iv: string;
   size: number;
   path: string;
   owner: Types.ObjectId;
@@ -18,8 +22,10 @@ export interface FichierModelI extends Model<FichierD> {}
 const fichierSchema = new Schema<FichierI>(
   {
     filename: { type: String, required: true, trim: true },
-    // Pour l'instant il n'y a pas de chiffrement, on garde le nom stocké tel quel.
     encryptedFilename: { type: String, required: true, trim: true },
+    encryptedFK: { type: String, required: true },
+    file_iv: { type: String, required: true },
+    fk_iv: { type: String, required: true },
     size: { type: Number, required: true, min: 0 },
     path: { type: String, required: true },
     owner: { type: Schema.Types.ObjectId, ref: "Users", required: true, index: true },

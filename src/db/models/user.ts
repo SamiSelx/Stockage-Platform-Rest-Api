@@ -26,6 +26,9 @@ const usersSchema = new Schema<UserI>(
     storageUsed: { type: Number, default: 0 },
     // Quota par défaut pour l'instant : 1 Go.
     storageLimit: { type: Number, default: 1024 * 1024 * 1024 },
+    salt: { type: String, required: true }, // PBKDF2 salt
+    encryptedRMK: { type: String, required: true },
+    rmk_iv: { type: String, required: true },
   },
   {
     timestamps: true,
