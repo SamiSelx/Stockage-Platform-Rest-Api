@@ -183,12 +183,12 @@ export class GestionDossierService {
       });
 
 
-      console.log(
-        "absolute path, parentFolder, folderCreated",
-        absolutePath,
-        parentFolder,
-        folderCreated,
-      );
+      // console.log(
+      //   "absolute path, parentFolder, folderCreated",
+      //   absolutePath,
+      //   parentFolder,
+      //   folderCreated,
+      // );
 
       await ensureUserStorageRoot(userId);
       try {
@@ -264,7 +264,10 @@ export class GestionDossierService {
               {
                 $match: {
                   $expr: {
-                    $eq: ["$folderId", "$$folderId"],
+                     $and: [
+              { $eq: ["$folderId", "$$folderId"] },
+              { $eq: ["$isArchived", false] }
+            ]
                   },
                 },
               },
@@ -285,7 +288,10 @@ export class GestionDossierService {
               {
                 $match: {
                   $expr: {
-                    $eq: ["$parentFolder", "$$folderId"],
+                    $and: [
+              { $eq: ["$parentFolder", "$$folderId"] },
+              { $eq: ["$isArchived", false] }
+            ]
                   },
                 },
               },

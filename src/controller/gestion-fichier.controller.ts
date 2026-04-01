@@ -75,11 +75,11 @@ export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
   }
 }
 
-export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
-  const { folderId } = req.body as { folderId?: string };
-  const result = await GestionFichierService.uploadFile(req.user as UserD, req.file, folderId);
-  return handleServiceResponse(result, res);
-}
+// export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
+//   const { folderId } = req.body as { folderId?: string };
+//   const result = await GestionFichierService.uploadFile(req.user as UserD, req.file, folderId);
+//   return handleServiceResponse(result, res);
+// }
 
 export async function listerFichiers(req: MyRequest<UserD>, res: Response) {
   const { folderId } = req.query as { folderId?: string };
