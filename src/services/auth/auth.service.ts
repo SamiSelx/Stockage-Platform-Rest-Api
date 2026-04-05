@@ -93,6 +93,9 @@ export class AuthServices {
     salt: string,
     encryptedRMK: string,
     rmk_iv: string,
+    encryptedPrivateKey: string,
+    privateKey_iv: string,
+    publicKey: string,
     stay: boolean,
     
      res : Response,
@@ -114,7 +117,7 @@ export class AuthServices {
         );
       }
       console.log("inside register - salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
-      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv });
+      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey });
       await user.save();
       console.log("user ",user)
       const token = Sign({ _id: user._id.toString(), role: user.role });

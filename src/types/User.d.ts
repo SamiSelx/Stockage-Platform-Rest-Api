@@ -15,6 +15,9 @@ declare interface UserI  extends UserAuthI{
     salt: string;
     encryptedRMK: string;
     rmk_iv: string;
+    encryptedPrivateKey:string;
+    privateKey_iv:string;
+    publicKey:string;
 }
 
 

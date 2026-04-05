@@ -11,9 +11,9 @@ export const SignIn = async (req: MyRequest<UserD>, res: Response,) => {
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 };
 export const SignUp = async (req: MyRequest<UserD>, res: Response,) => {
-	const { email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, stay = false } = req.body;
+	const { email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay = false } = req.body;
 	console.log("salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
-	const  result  = await AuthServices.executeRegister(email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, stay , res);
+	const  result  = await AuthServices.executeRegister(email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay , res);
 	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message , result.status);
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 }

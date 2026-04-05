@@ -16,49 +16,75 @@ export class GestionDossierService {
   private static async findOwnedFolderOrNull(
     userId: string,
     folderId?: string,
+    options?: { includeArchived?: boolean }
   ) {
     if (!folderId) return null;
 
-    const folder = await DossierModel.aggregate([
-      {
-        $match: {
-          _id: new Types.ObjectId(folderId),
-          owner: new Types.ObjectId(userId),
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "owner",
-          foreignField: "_id",
-          as: "owner",
-        },
-      },
-      {
-        $unwind: "$owner",
-      },
-    ]);
-    console.log("folders ", folder);
+    const query: Record<string, unknown> = {
+      _id: new Types.ObjectId(folderId),
+      owner: new Types.ObjectId(userId),
+    };
 
-    return folder[0];
+    if (!options?.includeArchived) {
+      query.isArchived = false;
+    }
+
+      
+//       =======
+//   ) {
+//     if (!folderId) return null;
+
+//     const folder = await DossierModel.aggregate([
+//       {
+//         $match: {
+//           _id: new Types.ObjectId(folderId),
+//           owner: new Types.ObjectId(userId),
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "owner",
+//           foreignField: "_id",
+//           as: "owner",
+//         },
+//       },
+//       {
+//         $unwind: "$owner",
+//       },
+//     ]);
+//     console.log("folders ", folder);
+
+//     return folder[0];
+//   }
+
+//   private static async getBreadcrumbPath(folderId: string) {
+//     const path = [];
+//     let current = await DossierModel.findById(folderId);
+
+//     while (current) {
+//       path.unshift({
+//         id: current._id,
+// >>>>>>> sami-folder
+        
+    return DossierModel.findOne(query).populate("owner");
   }
 
   private static async getBreadcrumbPath(folderId: string) {
-    const path = [];
+    const breadcrumb = [] as Array<{ id: string; label: string }>;
     let current = await DossierModel.findById(folderId);
 
     while (current) {
-      path.unshift({
-        id: current._id,
+      breadcrumb.unshift({
+        id: current._id.toString(),
         label: current.name,
       });
 
       if (!current.parentFolder) break;
-
       current = await DossierModel.findById(current.parentFolder);
     }
 
-    return path;
+    return breadcrumb;
   }
 
   private static serializeFolder(folder: DossierD) {
@@ -67,6 +93,8 @@ export class GestionDossierService {
       name: folder.name,
       owner: folder.owner,
       parentFolder: folder.parentFolder,
+      isArchived: folder.isArchived,
+      archivedAt: folder.archivedAt,
       createdAt: folder.createdAt,
       updatedAt: folder.updatedAt,
       filesCount: (folder as any).filesCount || 0,
@@ -87,14 +115,13 @@ export class GestionDossierService {
       const currentFolders = await DossierModel.find({
         owner,
         parentFolder: { $in: currentLevelIds },
-      });
+      }).populate("owner");
 
       if (!currentFolders.length) break;
 
-      collected.push(...currentFolders);
-      currentLevelIds = currentFolders.map(
-        (folder) => new Types.ObjectId(folder._id.toString()),
-      );
+      collected.push(...(currentFolders as unknown as DossierD[]));
+      currentLevelIds = currentFolders.map((folder) => new Types.ObjectId(folder._id.toString()));
+
     }
 
     return collected;
@@ -107,6 +134,7 @@ export class GestionDossierService {
   ): Promise<ResponseT> {
     try {
       const userId = user._id!.toString();
+
       console.log("parent id ", parentFolderId);
 
       const parentFolder = await this.findOwnedFolderOrNull(
@@ -145,20 +173,22 @@ export class GestionDossierService {
       );
       const absolutePath = resolveFolderAbsolutePath(userId, storagePath);
 
-      const folderCreated = await DossierModel.create({
+      await DossierModel.create({
         _id: folderId,
         name,
         owner: user._id,
         parentFolder: parentFolder ? parentFolder._id : null,
         storagePath,
+        isArchived: false,
       });
 
-      console.log(
-        "absolute path, parentFolder, folderCreated",
-        absolutePath,
-        parentFolder,
-        folderCreated,
-      );
+
+      // console.log(
+      //   "absolute path, parentFolder, folderCreated",
+      //   absolutePath,
+      //   parentFolder,
+      //   folderCreated,
+      // );
 
       await ensureUserStorageRoot(userId);
       try {
@@ -168,7 +198,7 @@ export class GestionDossierService {
         throw mkdirError;
       }
 
-      const createdFolder = await DossierModel.findById(folderId);
+      const createdFolder = await DossierModel.findById(folderId).populate("owner");
 
       return new SuccessResponseC(
         "success",
@@ -204,11 +234,13 @@ export class GestionDossierService {
         );
       }
 
+
       const folders = await DossierModel.aggregate([
         {
           $match: {
             owner: user._id,
             parentFolder: parentFolder ? parentFolder._id : null,
+            isArchived: false,
           },
         },
 
@@ -233,7 +265,10 @@ export class GestionDossierService {
               {
                 $match: {
                   $expr: {
-                    $eq: ["$folderId", "$$folderId"],
+                     $and: [
+              { $eq: ["$folderId", "$$folderId"] },
+              { $eq: ["$isArchived", false] }
+            ]
                   },
                 },
               },
@@ -254,7 +289,10 @@ export class GestionDossierService {
               {
                 $match: {
                   $expr: {
-                    $eq: ["$parentFolder", "$$folderId"],
+                    $and: [
+              { $eq: ["$parentFolder", "$$folderId"] },
+              { $eq: ["$isArchived", false] }
+            ]
                   },
                 },
               },
@@ -291,10 +329,9 @@ export class GestionDossierService {
       return new SuccessResponseC(
         "success",
         {
-          currentParent: parentFolder
-            ? this.serializeFolder(parentFolder)
-            : null,
-          folders: folders.map((folder) => this.serializeFolder(folder)),
+          currentParent: parentFolder ? this.serializeFolder(parentFolder as DossierD) : null,
+          folders: folders.map((folder) => this.serializeFolder(folder as DossierD)),
+
         },
         "Liste des dossiers récupérée avec succès",
         HttpCodes.OK.code,
@@ -315,6 +352,7 @@ export class GestionDossierService {
     try {
       const userId = user._id!.toString();
       const folder = await this.findOwnedFolderOrNull(userId, folderId);
+
       if (!folder) {
         return new ErrorResponseC(
           "Dossier introuvable",
@@ -323,19 +361,23 @@ export class GestionDossierService {
         );
       }
 
-      // get children folders
       const childFolders = await DossierModel.find({
-        owner: userId,
+        owner: user._id,
         parentFolder: folder._id,
-      }).sort({ createdAt: -1 });
+        isArchived: false,
+      })
+//         .populate("owner")
+        .sort({ createdAt: -1 });
+
 
       const breadcrumbPath = await this.getBreadcrumbPath(folderId);
 
       return new SuccessResponseC(
         "success",
         {
-          ...this.serializeFolder(folder),
-          children: childFolders.map((f) => this.serializeFolder(f)),
+          ...this.serializeFolder(folder as DossierD),
+          children: childFolders.map((child) => this.serializeFolder(child as DossierD)),
+
           breadcrumb: breadcrumbPath,
         },
         "Dossier récupéré avec succès",
@@ -350,7 +392,8 @@ export class GestionDossierService {
     }
   }
 
-  static async deleteFolder(user: UserD, folderId: string): Promise<ResponseT> {
+  static async archiveFolder(user: UserD, folderId: string): Promise<ResponseT> {
+
     try {
       const userId = user._id!.toString();
       const rootFolder = await this.findOwnedFolderOrNull(userId, folderId);
@@ -363,13 +406,148 @@ export class GestionDossierService {
         );
       }
 
-      const descendants = await this.collectDescendantFolders(
-        userId,
-        rootFolder._id.toString(),
+      const descendants = await this.collectDescendantFolders(userId, rootFolder._id.toString());
+      const allFolderIds = [rootFolder, ...descendants].map((folder) => folder._id);
+      const archivedAt = new Date();
+
+      await DossierModel.updateMany(
+        { owner: user._id, _id: { $in: allFolderIds } },
+        { $set: { isArchived: true, archivedAt } }
       );
-      const allFolderIds = [rootFolder, ...descendants].map(
-        (folder) => folder._id,
+
+      await FichierModel.updateMany(
+        { owner: user._id, folderId: { $in: allFolderIds } },
+        { $set: { isArchived: true, archivedAt } }
       );
+
+      const archivedFilesCount = await FichierModel.countDocuments({
+        owner: user._id,
+        folderId: { $in: allFolderIds },
+        isArchived: true,
+      });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          archivedFolderId: folderId,
+          archivedFoldersCount: allFolderIds.length,
+          archivedFilesCount,
+        },
+        "Dossier déplacé vers la corbeille avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de l'archivage du dossier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async restoreFolder(user: UserD, folderId: string): Promise<ResponseT> {
+    try {
+      const userId = user._id!.toString();
+      const rootFolder = await this.findOwnedFolderOrNull(userId, folderId, { includeArchived: true });
+
+      if (!rootFolder || !rootFolder.isArchived) {
+        return new ErrorResponseC("Dossier introuvable dans la corbeille", HttpCodes.NotFound.code, null);
+      }
+
+      if (rootFolder.parentFolder) {
+        const parentFolder = await DossierModel.findOne({ _id: rootFolder.parentFolder, owner: user._id });
+        if (parentFolder?.isArchived) {
+          return new ErrorResponseC(
+            "Impossible de restaurer ce dossier tant que son parent est dans la corbeille",
+            HttpCodes.Conflict.code,
+            null
+          );
+        }
+      }
+
+      const descendants = await this.collectDescendantFolders(userId, rootFolder._id.toString());
+      const allFolderIds = [rootFolder, ...descendants].map((folder) => folder._id);
+
+      await DossierModel.updateMany(
+        { owner: user._id, _id: { $in: allFolderIds } },
+        { $set: { isArchived: false, archivedAt: null } }
+      );
+
+      await FichierModel.updateMany(
+        { owner: user._id, folderId: { $in: allFolderIds } },
+        { $set: { isArchived: false, archivedAt: null } }
+      );
+
+      return new SuccessResponseC(
+        "success",
+        {
+          restoredFolderId: folderId,
+          restoredFoldersCount: allFolderIds.length,
+        },
+        "Dossier restauré avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la restauration du dossier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async listTrashFolders(user: UserD): Promise<ResponseT> {
+    try {
+      const archivedFolders = await DossierModel.find({ owner: user._id, isArchived: true })
+        .populate("owner")
+        .sort({ archivedAt: -1 });
+
+      const parentIds = archivedFolders
+        .map((folder) => folder.parentFolder?.toString())
+        .filter((value): value is string => Boolean(value));
+
+      const parents = parentIds.length
+        ? await DossierModel.find({ _id: { $in: parentIds }, owner: user._id })
+        : [];
+
+      const archivedParentIds = new Set(
+        parents.filter((parent) => parent.isArchived).map((parent) => parent._id.toString())
+      );
+
+      const visibleTrashFolders = archivedFolders.filter((folder) => {
+        if (!folder.parentFolder) return true;
+        return !archivedParentIds.has(folder.parentFolder.toString());
+      });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          folders: visibleTrashFolders.map((folder) => this.serializeFolder(folder as DossierD)),
+        },
+        "Corbeille des dossiers récupérée avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la récupération de la corbeille des dossiers",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
+  static async deleteFolderPermanently(user: UserD, folderId: string): Promise<ResponseT> {
+    try {
+      const userId = user._id!.toString();
+      const rootFolder = await this.findOwnedFolderOrNull(userId, folderId, { includeArchived: true });
+
+      if (!rootFolder || !rootFolder.isArchived) {
+        return new ErrorResponseC("Dossier introuvable dans la corbeille", HttpCodes.NotFound.code, null);
+      }
+
+      const descendants = await this.collectDescendantFolders(userId, rootFolder._id.toString());
+      const allFolderIds = [rootFolder, ...descendants].map((folder) => folder._id);
+
 
       const filesToDelete = await FichierModel.find({
         owner: user._id,
@@ -386,17 +564,14 @@ export class GestionDossierService {
       );
 
       await deleteDirectoryIfExists(rootAbsolutePath);
-      await FichierModel.deleteMany({
-        owner: user._id,
-        folderId: { $in: allFolderIds },
-      });
-      await DossierModel.deleteMany({
-        owner: user._id,
-        _id: { $in: allFolderIds },
-      });
+      await FichierModel.deleteMany({ owner: user._id, folderId: { $in: allFolderIds } });
+      await DossierModel.deleteMany({ owner: user._id, _id: { $in: allFolderIds } });
+
+      const nextStorageUsed = Math.max(0, user.storageUsed - releasedSize);
       await UserModel.updateOne(
         { _id: user._id },
-        { $set: { storageUsed: Math.max(0, user.storageUsed - releasedSize) } },
+        { $set: { storageUsed: nextStorageUsed } }
+
       );
 
       return new SuccessResponseC(
@@ -406,13 +581,19 @@ export class GestionDossierService {
           deletedFoldersCount: allFolderIds.length,
           deletedFilesCount: filesToDelete.length,
           releasedSize,
+          storage: {
+            storageUsed: nextStorageUsed,
+            storageLimit: user.storageLimit,
+            storageRemaining: Math.max(0, user.storageLimit - nextStorageUsed),
+          },
         },
-        "Dossier supprimé avec succès",
-        HttpCodes.OK.code,
+        "Dossier supprimé définitivement avec succès",
+        HttpCodes.OK.code
+
       );
     } catch (error) {
       return new ErrorResponseC(
-        "Erreur lors de la suppression du dossier",
+        "Erreur lors de la suppression définitive du dossier",
         HttpCodes.InternalServerError.code,
         error,
       );

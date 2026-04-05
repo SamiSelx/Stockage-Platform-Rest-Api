@@ -24,6 +24,14 @@ export const suppressionDossierValidators = [
   param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
 ];
 
+export const restaurationDossierValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
+];
+
+export const suppressionDefinitiveDossierValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
+];
+
 export const getFolderByIdValidators = [
   param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
 ];
