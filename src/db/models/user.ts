@@ -29,6 +29,9 @@ const usersSchema = new Schema<UserI>(
     salt: { type: String, required: true }, // PBKDF2 salt
     encryptedRMK: { type: String, required: true },
     rmk_iv: { type: String, required: true },
+    publicKey: { type: String, required: true },
+    encryptedPrivateKey: { type: String, required: true },
+    privateKey_iv: { type: String, required: true },
   },
   {
     timestamps: true,

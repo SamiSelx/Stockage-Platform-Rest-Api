@@ -240,6 +240,7 @@ export class GestionDossierService {
           $match: {
             owner: user._id,
             parentFolder: parentFolder ? parentFolder._id : null,
+            isArchived: false,
           },
         },
 
