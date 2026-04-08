@@ -42,3 +42,10 @@ export const starredFileValidators = [
   param("id").isMongoId().withMessage("L'identifiant du fichier est invalide"),
   body("starred").isBoolean().withMessage("starred doit être un booléen"),
 ];
+
+export const shareFileValidators = [
+  param("fileId").notEmpty().isMongoId().withMessage("Invalid file ID"),
+  body("recipientId").notEmpty().isMongoId().withMessage("Invalid recipient ID"),
+  body("encryptedFK").notEmpty().isString().withMessage("Encrypted file key is required"),
+  // body("fk_iv").notEmpty().isString().withMessage("IV is required"),
+];

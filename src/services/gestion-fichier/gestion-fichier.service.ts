@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import crypto from "crypto";
 import { Types } from "mongoose";
 import { HttpCodes } from "../../config/Errors";
 import { DossierModel } from "../../db/models/dossier";
@@ -17,6 +16,9 @@ import {
   resolveFolderAbsolutePath,
 } from "../../utils/stockage";
 import { UploadedFile } from "../../controller/gestion-fichier.controller";
+import fileLogs, { fileLogger } from "./file.logs";
+import { formatString } from "../../utils/Strings";
+import { FileShareModel } from "../../db/models/fileShare";
 
 export class GestionFichierService {
   private static detectFileType(file: Pick<FichierD, "filename" | "mimetype">) {
@@ -793,4 +795,89 @@ export class GestionFichierService {
       );
     }
   }
+
+   static executeShareFile = async (
+    fileId: string,
+    recipientId: string,
+    encryptedFK: string,
+    // fk_iv: string
+  ): Promise<ResponseT> => {
+    try {
+      const file = await FichierModel.findById(fileId);
+      if (!file) {
+        const msg = formatString(fileLogs.SHARE_FILE_ERROR_FILE_NOT_FOUND.message, { fileId });
+        fileLogger.error(msg);
+        return new ErrorResponseC(
+          fileLogs.SHARE_FILE_ERROR_FILE_NOT_FOUND.type,
+          HttpCodes.NotFound.code,
+          msg
+        );
+      }
+
+      const alreadyShared = await FileShareModel.findOne({ fileId, recipientId });
+      if (alreadyShared) {
+        const msg = formatString(fileLogs.SHARE_FILE_ERROR_ALREADY_SHARED.message, { fileId, recipientId });
+        fileLogger.error(msg);
+        return new ErrorResponseC(
+          fileLogs.SHARE_FILE_ERROR_ALREADY_SHARED.type,
+          HttpCodes.BadRequest.code,
+          msg
+        );
+      }
+
+      const share = new FileShareModel({ fileId, recipientId, encryptedFK });
+      await share.save();
+
+      const msg = formatString(fileLogs.SHARE_FILE_SUCCESS.message, { fileId, recipientId });
+      fileLogger.info(msg, { type: fileLogs.SHARE_FILE_SUCCESS.type });
+
+      return new SuccessResponseC(
+        fileLogs.SHARE_FILE_SUCCESS.type,
+        share.toObject(),
+        msg,
+        HttpCodes.Created.code
+      );
+    } catch (err) {
+      const msg = formatString(fileLogs.SHARE_FILE_ERROR_GENERIC.message, {
+        error: (err as Error)?.message || "",
+        fileId,
+      });
+      fileLogger.error(msg, err as Error);
+      return new ErrorResponseC(
+        fileLogs.SHARE_FILE_ERROR_GENERIC.type,
+        HttpCodes.InternalServerError.code,
+        msg
+      );
+    }
+  };
+
+  static executeGetSharedFiles = async (recipientId: string): Promise<ResponseT> => {
+  try {
+    const shares = await FileShareModel.find({ recipientId })
+      .populate("fileId")       
+      .sort({ createdAt: -1 }); 
+
+    const msg = formatString(fileLogs.GET_SHARED_FILES_SUCCESS.message, { recipientId });
+    fileLogger.info(msg, { type: fileLogs.GET_SHARED_FILES_SUCCESS.type });
+
+    return new SuccessResponseC(
+      fileLogs.GET_SHARED_FILES_SUCCESS.type,
+      shares,
+      msg,
+      HttpCodes.OK.code
+    );
+  } catch (err) {
+    const msg = formatString(fileLogs.GET_SHARED_FILES_ERROR_GENERIC.message, {
+      error: (err as Error)?.message || "",
+      recipientId,
+    });
+    fileLogger.error(msg, err as Error);
+    return new ErrorResponseC(
+      fileLogs.GET_SHARED_FILES_ERROR_GENERIC.type,
+      HttpCodes.InternalServerError.code,
+      msg
+    );
+  }
+};
+
 }

@@ -75,6 +75,23 @@ export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
   }
 }
 
+export const ShareFile = async (req: MyRequest<UserD>, res: Response) => {
+  const { fileId } = req.params;
+  const { recipientId, encryptedFK } = req.body;
+
+  const result = await GestionFichierService.executeShareFile(fileId, recipientId, encryptedFK);
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
+export const GetSharedFiles = async (req: MyRequest<UserD>, res: Response) => {
+  const recipientId = req.user._id!.toString();
+
+  const result = await GestionFichierService.executeGetSharedFiles(recipientId);
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
 // export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
 //   const { folderId } = req.body as { folderId?: string };
 //   const result = await GestionFichierService.uploadFile(req.user as UserD, req.file, folderId);

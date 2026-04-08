@@ -2,12 +2,14 @@ import { Router } from "express";
 import {
   deplacerFichier,
   getRecentFiles,
+  GetSharedFiles,
   getStarredFiles,
   getStatistics,
   getTrashFiles,
   listerFichiers,
   restaurerFichier,
   setStarredFile,
+  ShareFile,
   supprimerFichier,
   supprimerFichierDefinitivement,
   telechargerFichier,
@@ -22,6 +24,7 @@ import {
   listeFichiersValidators,
   recentFilesValidators,
   restaurationFichierValidators,
+  shareFileValidators,
   starredFileValidators,
   suppressionDefinitiveFichierValidators,
   suppressionFichierValidators,
@@ -136,5 +139,13 @@ gestionFichierRouter.delete(
   validator,
   supprimerFichier
 );
+
+gestionFichierRouter
+  .route("/:fileId/share")
+  .post(checkLogs, isLoggedIn, shareFileValidators, validator, ShareFile);
+
+  gestionFichierRouter
+  .route("/shared")
+  .get(checkLogs, isLoggedIn, GetSharedFiles);
 
 export default gestionFichierRouter;
