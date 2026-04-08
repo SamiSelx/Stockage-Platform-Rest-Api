@@ -31,3 +31,23 @@ export const Logout = async (req:MyRequest<UserD>,res:Response) => {
 	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message , result.status);
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 }
+
+export const GetCryptoMaterial = async (req: MyRequest<UserD>, res: Response) => {
+	const result = await AuthServices.executeGetCryptoMaterial(req.user!);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
+export const ChangePassword = async (req: MyRequest<UserD>, res: Response) => {
+	const { oldPassword, newPassword, salt, encryptedRMK, rmk_iv } = req.body;
+	const result = await AuthServices.executeChangePassword(
+		req.user!,
+		oldPassword,
+		newPassword,
+		salt,
+		encryptedRMK,
+		rmk_iv
+	);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};

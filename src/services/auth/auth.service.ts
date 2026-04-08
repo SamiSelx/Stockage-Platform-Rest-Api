@@ -208,4 +208,90 @@ export class AuthServices {
       );
     }
   };
+
+  static executeGetCryptoMaterial = async (user: UserD): Promise<ResponseT> => {
+    console.log(user);
+    try {
+      const msg = formatString(authLogs.GET_CRYPTO_MATERIAL_SUCCESS.message, {
+        email: user.email,
+      });
+      authLogger.info(msg, { type: authLogs.GET_CRYPTO_MATERIAL_SUCCESS.type });
+      return new SuccessResponseC(
+        authLogs.GET_CRYPTO_MATERIAL_SUCCESS.type,
+        {
+          salt: user.salt,
+          encryptedRMK: user.encryptedRMK,
+          rmk_iv: user.rmk_iv,
+        },
+        msg,
+        HttpCodes.OK.code
+      );
+    } catch (err) {
+      const msg = formatString(authLogs.CHANGE_PASSWORD_ERROR_GENERIC.message, {
+        email: user.email,
+        error: (err as Error)?.message || "",
+      });
+      authLogger.error(msg, err as Error);
+      return new ErrorResponseC(
+        authLogs.CHANGE_PASSWORD_ERROR_GENERIC.type,
+        HttpCodes.InternalServerError.code,
+        msg
+      );
+    }
+  };
+
+  static executeChangePassword = async (
+    user: UserD,
+    oldPassword: string,
+    newPassword: string,
+    salt: string,
+    encryptedRMK: string,
+    rmk_iv: string
+  ): Promise<ResponseT> => {
+    try {
+      const isPasswordMatch = await user.comparePasswords(oldPassword);
+      if (!isPasswordMatch) {
+        const msg = formatString(
+          authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.message,
+          { email: user.email }
+        );
+        authLogger.error(msg, {
+          type: authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.type,
+        });
+        return new ErrorResponseC(
+          authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.type,
+          HttpCodes.Unauthorized.code,
+          msg
+        );
+      }
+
+      user.password = newPassword;
+      user.salt = salt;
+      user.encryptedRMK = encryptedRMK;
+      user.rmk_iv = rmk_iv;
+      await user.save();
+
+      const msg = formatString(authLogs.CHANGE_PASSWORD_SUCCESS.message, {
+        email: user.email,
+      });
+      authLogger.info(msg, { type: authLogs.CHANGE_PASSWORD_SUCCESS.type });
+      return new SuccessResponseC(
+        authLogs.CHANGE_PASSWORD_SUCCESS.type,
+        null,
+        msg,
+        HttpCodes.OK.code
+      );
+    } catch (err) {
+      const msg = formatString(authLogs.CHANGE_PASSWORD_ERROR_GENERIC.message, {
+        email: user.email,
+        error: (err as Error)?.message || "",
+      });
+      authLogger.error(msg, err as Error);
+      return new ErrorResponseC(
+        authLogs.CHANGE_PASSWORD_ERROR_GENERIC.type,
+        HttpCodes.InternalServerError.code,
+        msg
+      );
+    }
+  };
 }
