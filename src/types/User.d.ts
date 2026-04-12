@@ -18,6 +18,8 @@ declare interface UserI  extends UserAuthI{
     encryptedPrivateKey:string;
     privateKey_iv:string;
     publicKey:string;
+    identityCertificate?: string;
+    identityCertSignature?: string;
 }
 
 

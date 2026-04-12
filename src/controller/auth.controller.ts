@@ -51,3 +51,32 @@ export const ChangePassword = async (req: MyRequest<UserD>, res: Response) => {
 	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
 };
+
+export const EnrollCertificate = async (req: MyRequest<UserD>, res: Response) => {
+	const { signPublicKeySpkiB64 } = req.body;
+	const result = await AuthServices.executeEnrollCertificate(req.user!, signPublicKeySpkiB64);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
+export const StartIdentityChallenge = async (req: MyRequest<UserD>, res: Response) => {
+	const result = await AuthServices.executeStartIdentityChallenge(req.user!);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
+export const VerifyIdentityChallenge = async (req: MyRequest<UserD>, res: Response) => {
+	const { challengeId, certificate, caSignatureB64, clientTimestamp, signedPayloadB64, signatureB64 } = req.body;
+	const result = await AuthServices.executeVerifyIdentityChallenge(
+		req.user!,
+		challengeId,
+		certificate,
+		caSignatureB64,
+		clientTimestamp,
+		signedPayloadB64,
+		signatureB64,
+		res,
+	);
+	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};

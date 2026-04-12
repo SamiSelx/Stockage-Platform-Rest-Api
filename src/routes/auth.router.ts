@@ -2,6 +2,9 @@ import {
   loginValidators,
   registerValidators,
   changePasswordValidators,
+  enrollCertificateValidators,
+  startIdentityChallengeValidators,
+  verifyIdentityChallengeValidators,
 } from "../services/auth/auth.validator";
 import {
   SignIn,
@@ -10,6 +13,9 @@ import {
   Logout,
   GetCryptoMaterial,
   ChangePassword,
+  EnrollCertificate,
+  StartIdentityChallenge,
+  VerifyIdentityChallenge,
 } from "../controller/auth.controller";
 import { Router } from "express";
 import { validator } from "../middleware/validator";
@@ -32,6 +38,36 @@ authRouter
     changePasswordValidators,
     validator,
     ChangePassword,
+  );
+
+authRouter
+  .route("/cert/enroll")
+  .post(
+    checkLogs,
+    isLoggedIn,
+    enrollCertificateValidators,
+    validator,
+    EnrollCertificate,
+  );
+
+authRouter
+  .route("/challenge/start")
+  .post(
+    checkLogs,
+    isLoggedIn,
+    startIdentityChallengeValidators,
+    validator,
+    StartIdentityChallenge,
+  );
+
+authRouter
+  .route("/challenge/verify")
+  .post(
+    checkLogs,
+    isLoggedIn,
+    verifyIdentityChallengeValidators,
+    validator,
+    VerifyIdentityChallenge,
   );
 
 export default authRouter;
