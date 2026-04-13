@@ -11,9 +11,8 @@ export const SignIn = async (req: MyRequest<UserD>, res: Response,) => {
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 };
 export const SignUp = async (req: MyRequest<UserD>, res: Response,) => {
-	const { email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay = false } = req.body;
-	console.log("salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
-	const  result  = await AuthServices.executeRegister(email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay , res);
+	const { email, password, firstName, lastName, salt, encryptedRMK, rmk_iv,encryptedRMK_recovery, rmk_recovery_iv , encryptedPrivateKey_recovery, privateKey_recovery_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay = false } = req.body;
+	const  result  = await AuthServices.executeRegister(email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedRMK_recovery, rmk_recovery_iv, encryptedPrivateKey_recovery, privateKey_recovery_iv, encryptedPrivateKey, privateKey_iv, publicKey, stay , res);
 	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message , result.status);
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error );
 }
@@ -79,4 +78,23 @@ export const VerifyIdentityChallenge = async (req: MyRequest<UserD>, res: Respon
 	);
 	if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
 	if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+	
 };
+
+export async function getPublicAuthData(req: MyRequest<UserD>, res: Response) {
+  const { email } = req.query;
+  const result = await AuthServices.executeGetPublicAuthData(email as string);
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+}
+
+export async function resetPasswordWithRecovery(req: MyRequest<UserD>, res: Response) {
+  const { email, newPassword, newEncryptedRMK, newRmk_iv, newEncryptedPrivateKey, newPrivateKey_iv } = req.body;
+  const result = await AuthServices.executeResetPasswordWithRecoveryKey(
+    email, newPassword, newEncryptedRMK, newRmk_iv, newEncryptedPrivateKey, newPrivateKey_iv
+  );
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+}
+
+

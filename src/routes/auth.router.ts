@@ -16,6 +16,8 @@ import {
   EnrollCertificate,
   StartIdentityChallenge,
   VerifyIdentityChallenge,
+  getPublicAuthData,
+  resetPasswordWithRecovery,
 } from "../controller/auth.controller";
 import { Router } from "express";
 import { validator } from "../middleware/validator";
@@ -69,5 +71,8 @@ authRouter
     validator,
     VerifyIdentityChallenge,
   );
+
+authRouter.get("/public-data", getPublicAuthData);
+authRouter.post("/reset-password/recovery", resetPasswordWithRecovery);
 
 export default authRouter;
