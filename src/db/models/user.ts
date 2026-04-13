@@ -22,6 +22,22 @@ const usersSchema = new Schema<UserI>(
     password: { type: String, required },
     role: { type: String, enum: ["admin", "user"], default: "user" },
     enable: { type: Boolean, default: true },
+    // Espace réellement utilisé par les fichiers de l'utilisateur.
+    storageUsed: { type: Number, default: 0 },
+    // Quota par défaut pour l'instant : 1 Go.
+    storageLimit: { type: Number, default: 1024 * 1024 * 1024 },
+    salt: { type: String, required: true }, // PBKDF2 salt
+    encryptedRMK: { type: String, required: true },
+    rmk_iv: { type: String, required: true },
+    encryptedRMK_recovery: { type: String },
+    rmk_recovery_iv: { type: String },
+    encryptedPrivateKey_recovery: { type: String },
+privateKey_recovery_iv: { type: String },
+    publicKey: { type: String, required: true },
+    encryptedPrivateKey: { type: String, required: true },
+    privateKey_iv: { type: String, required: true },
+    identityCertificate: { type: String, default: null },
+    identityCertSignature: { type: String, default: null },
   },
   {
     timestamps: true,

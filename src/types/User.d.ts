@@ -10,6 +10,20 @@ declare interface UserI  extends UserAuthI{
 	lastName: string;
     role: "admin" | "user" ;
     enable: boolean;
+    storageUsed: number;
+    storageLimit: number;
+    salt: string;
+    encryptedRMK: string;
+    rmk_iv: string;
+    encryptedRMK_recovery: string;
+    rmk_recovery_iv: string;
+    encryptedPrivateKey_recovery: string;
+    privateKey_recovery_iv: string;
+    encryptedPrivateKey:string;
+    privateKey_iv:string;
+    publicKey:string;
+    identityCertificate?: string;
+    identityCertSignature?: string;
 }
 
 
