@@ -14,6 +14,7 @@ import {
   supprimerFichierDefinitivement,
   telechargerFichier,
   televerserFichier,
+  televerserPlusieursFichiers,
 } from "../controller/gestion-fichier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { uploadFichierMiddleware } from "../middleware/gestion-fichier.middleware";
@@ -44,6 +45,17 @@ gestionFichierRouter.post(
   uploadFichierValidators,
   validator,
   televerserFichier
+);
+
+gestionFichierRouter.post(
+  "/upload-multiple",
+  checkLogs,
+  isLoggedIn,
+  uploadFichierMiddleware.array("file"),
+  normaliserNavigationStockage,
+  uploadFichierValidators,
+  validator,
+  televerserPlusieursFichiers
 );
 
 gestionFichierRouter.get(

@@ -105,6 +105,50 @@ export class GestionFichierService {
   }
 
 
+  private static async findAccessibleFile(
+  userId: string,
+  fileId: string,
+  options?: { includeArchived?: boolean }
+): Promise<FichierD | null> {
+  const objectUserId = new Types.ObjectId(userId);
+  const objectFileId = new Types.ObjectId(fileId);
+
+  const query: Record<string, unknown> = {
+    _id: objectFileId,
+  };
+
+  if (!options?.includeArchived) {
+    query.isArchived = false;
+  }
+
+  let file = await FichierModel.findOne({
+    ...query,
+    owner: objectUserId,
+  });
+
+  if (file) {
+    return file;
+  }
+
+  const share = await FileShareModel.findOne({
+    recipientId: objectUserId,
+    fileId: objectFileId,
+  }).populate("fileId");
+
+  if (!share || !share.fileId) {
+    return null;
+  }
+
+  const sharedFile = share.fileId as unknown as FichierD;
+
+  if (!options?.includeArchived && sharedFile.isArchived) {
+    return null;
+  }
+
+  return sharedFile;
+}
+
+
 // static async uploadFile(
 //   user: UserD,
 //   file: UploadedFile,
@@ -319,6 +363,113 @@ export class GestionFichierService {
     }
   }
 
+  static async uploadMultipleFiles(
+    user: UserD,
+    files: UploadedFile[],
+    folderId?: string
+  ): Promise<ResponseT> {
+    if (!files?.length) {
+      return new ErrorResponseC("Aucun fichier n'a été envoyé", HttpCodes.BadRequest.code, null);
+    }
+
+    const createdFileIds: Types.ObjectId[] = [];
+    const movedFilePaths: string[] = [];
+
+    try {
+      const userId = user._id!.toString();
+      const targetFolder = await this.findOwnedFolderOrNull(userId, folderId);
+
+      if (folderId && !targetFolder) {
+        await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+        return new ErrorResponseC(
+          "Le dossier cible est introuvable",
+          HttpCodes.NotFound.code,
+          null
+        );
+      }
+
+      const totalSize = files.reduce((acc, file) => acc + Number(file.size || 0), 0);
+
+      if (user.storageUsed + totalSize > user.storageLimit) {
+        await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+        return new ErrorResponseC(
+          "Quota de stockage dépassé",
+          HttpCodes.PayloadTooLarge.code,
+          {
+            storageUsed: user.storageUsed,
+            storageLimit: user.storageLimit,
+            requestedSize: totalSize,
+          }
+        );
+      }
+
+      await ensureUserStorageRoot(userId);
+
+      const targetDirectory = resolveFolderAbsolutePath(userId, targetFolder?.storagePath);
+      await ensureDirectoryExists(targetDirectory);
+
+      const createdFiles: FichierD[] = [];
+
+      for (const file of files) {
+        const storedFileName = createStoredFileName(file.originalname);
+        const finalAbsolutePath = path.join(targetDirectory, storedFileName);
+
+        await fs.rename(file.path, finalAbsolutePath);
+        movedFilePaths.push(finalAbsolutePath);
+
+        const relativePath = path.relative(getUserStorageRoot(userId), finalAbsolutePath);
+
+        const createdFile = await FichierModel.create({
+          filename: file.originalname,
+          encryptedFK: file.encryptedFK,
+          file_iv: file.file_iv,
+          fk_iv: file.fk_iv,
+          encryptedFilename: storedFileName,
+          size: file.size,
+          path: relativePath,
+          owner: user._id,
+          folderId: targetFolder ? targetFolder._id : null,
+          mimetype: file.mimetype,
+          isArchived: false,
+          isStarred: false,
+        });
+
+        createdFileIds.push(createdFile._id as Types.ObjectId);
+        createdFiles.push(createdFile);
+      }
+
+      const updatedStorageUsed = user.storageUsed + totalSize;
+      await UserModel.updateOne({ _id: user._id }, { $set: { storageUsed: updatedStorageUsed } });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          files: createdFiles.map((createdFile) => this.serializeFile(createdFile)),
+          storage: {
+            storageUsed: updatedStorageUsed,
+            storageLimit: user.storageLimit,
+            storageRemaining: Math.max(0, user.storageLimit - updatedStorageUsed),
+          },
+        },
+        "Fichiers téléversés avec succès",
+        HttpCodes.Created.code
+      );
+    } catch (error) {
+      if (createdFileIds.length) {
+        await FichierModel.deleteMany({ _id: { $in: createdFileIds } });
+      }
+
+      await Promise.all(movedFilePaths.map((filePath) => deleteFileIfExists(filePath)));
+      await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+
+      return new ErrorResponseC(
+        "Erreur lors du téléversement des fichiers",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
   static async listFiles(user: UserD, folderId?: string): Promise<ResponseT> {
     try {
       const userId = user._id!.toString();
@@ -393,14 +544,14 @@ export class GestionFichierService {
 
   static async getDownloadableFile(user: UserD, fileId: string): Promise<ResponseT> {
     try {
-      const file = await this.findOwnedFile(user._id!.toString(), fileId);
+      const file = await this.findAccessibleFile(user._id!.toString(), fileId);
 
       if (!file) {
         return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
       }
       
 
-      const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
+      const absoluteFilePath = path.join(getUserStorageRoot(file.owner.toString()), file.path);
       await fs.access(absoluteFilePath);
       console.log("file path:", absoluteFilePath, file.path);
 
@@ -635,6 +786,8 @@ export class GestionFichierService {
         archivedFolders,
         starredFiles,
         openedFiles,
+        totalSharedFiles,
+        sharedWithMe,
       ] = await Promise.all([
         FichierModel.countDocuments({ owner, isArchived: false }),
         DossierModel.countDocuments({ owner, isArchived: false }),
@@ -642,6 +795,9 @@ export class GestionFichierService {
         DossierModel.countDocuments({ owner, isArchived: true }),
         FichierModel.countDocuments({ owner, isArchived: false, isStarred: true }),
         FichierModel.countDocuments({ owner, isArchived: false, lastOpenedAt: { $ne: null } }),
+        FileShareModel.countDocuments({ fileId: { $in: await FichierModel.find({ owner }).distinct("_id") } }),
+        // FileShareModel.countDocuments({ recipientId: owner }),
+        FileShareModel.distinct("fileId", { recipientId: owner }).then(ids => ids.length),
       ]);
 
       const storageUsed = freshUser?.storageUsed ?? user.storageUsed;
@@ -656,6 +812,8 @@ export class GestionFichierService {
           archivedFolders,
           starredFiles,
           openedFiles,
+          totalSharedFiles,
+          sharedWithMe,
           storage: {
             used: storageUsed,
             total: storageLimit,
@@ -854,7 +1012,10 @@ export class GestionFichierService {
   static executeGetSharedFiles = async (recipientId: string): Promise<ResponseT> => {
   try {
     const shares = await FileShareModel.find({ recipientId })
-      .populate("fileId")       
+      .populate({
+        path: "fileId",
+        populate: { path: "owner" }
+      })
       .sort({ createdAt: -1 }); 
 
     const msg = formatString(fileLogs.GET_SHARED_FILES_SUCCESS.message, { recipientId });
@@ -862,7 +1023,10 @@ export class GestionFichierService {
 
     return new SuccessResponseC(
       fileLogs.GET_SHARED_FILES_SUCCESS.type,
-      shares,
+      shares.map((share) => ({
+    ...share.toObject(),
+    fileId: this.serializeFile(((share.fileId as unknown) as FichierD).toObject()),
+  })),
       msg,
       HttpCodes.OK.code
     );
