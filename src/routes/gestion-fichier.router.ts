@@ -13,8 +13,10 @@ import {
   supprimerFichier,
   supprimerFichierDefinitivement,
   telechargerFichier,
+  telechargerFichiersBulk,
   televerserFichier,
   televerserPlusieursFichiers,
+  updateFileName,
 } from "../controller/gestion-fichier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { uploadFichierMiddleware } from "../middleware/gestion-fichier.middleware";
@@ -31,6 +33,7 @@ import {
   suppressionFichierValidators,
   telechargementFichierValidators,
   uploadFichierValidators,
+  updateFileNameValidators,
 } from "../services/gestion-fichier/gestion-fichier.validator";
 import upload from "../middleware/file";
 
@@ -107,6 +110,14 @@ gestionFichierRouter.get(
   telechargerFichier
 );
 
+gestionFichierRouter.post(
+  "/download/bulk",
+  checkLogs,
+  isLoggedIn,
+  validator,
+  telechargerFichiersBulk
+);
+
 gestionFichierRouter.patch(
   "/:id/star",
   checkLogs,
@@ -150,6 +161,15 @@ gestionFichierRouter.delete(
   suppressionFichierValidators,
   validator,
   supprimerFichier
+);
+
+gestionFichierRouter.patch(
+  "/:id/rename",
+  checkLogs,
+  isLoggedIn,
+  updateFileNameValidators,
+  validator,
+  updateFileName
 );
 
 gestionFichierRouter

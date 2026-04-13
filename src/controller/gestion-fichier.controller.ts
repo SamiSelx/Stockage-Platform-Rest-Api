@@ -6,6 +6,7 @@ import { MyRequest } from "../types/Express";
 import { ErrorResponse, SuccessResponse } from "../utils/Response";
 import fsp from "fs/promises";
 import fs from "fs"; 
+import archiver from "archiver";
 
 
 export interface UploadedFile {
@@ -178,7 +179,6 @@ export async function setStarredFile(req: MyRequest<UserD>, res: Response) {
 
 export async function telechargerFichier(req: MyRequest<UserD>, res: Response) {
   const { id } = req.params;
-  console.log("Download request for file ID:", id);
   const result = await GestionFichierService.getDownloadableFile(req.user as UserD, id);
   
 
@@ -208,6 +208,37 @@ export async function telechargerFichier(req: MyRequest<UserD>, res: Response) {
   }
 }
 
+export async function telechargerFichiersBulk(req: MyRequest<UserD>, res: Response) {
+  const { fileIds } = req.body;
+  const result = await GestionFichierService.getBulkDownloadableFiles(req.user as UserD, fileIds);
+
+  if (result instanceof SuccessResponseC) {
+    const payload = result.data as {
+      files: { file: { filename: string; mimetype?: string }; filePath: string }[];
+    };
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    res.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="fichiers.zip"`,
+    });
+
+    archive.pipe(res);
+
+    for (const { file, filePath } of payload.files) {
+      archive.file(filePath, { name: file.filename });
+    }
+
+    await archive.finalize();
+    return;
+  }
+
+  if (result instanceof ErrorResponseC) {
+    return ErrorResponse(res, result.code, result.message, result.error);
+  }
+}
+
 export async function supprimerFichier(req: MyRequest<UserD>, res: Response) {
   const { id } = req.params;
   const result = await GestionFichierService.archiveFile(req.user as UserD, id);
@@ -230,5 +261,12 @@ export async function deplacerFichier(req: MyRequest<UserD>, res: Response) {
   const { id } = req.params;
   const { folderId } = req.body as { folderId?: string };
   const result = await GestionFichierService.moveFile(req.user as UserD, id, folderId);
+  return handleServiceResponse(result, res);
+}
+
+export async function updateFileName(req: MyRequest<UserD>, res: Response) {
+  const { id } = req.params;
+  const { name } = req.body as { name: string };
+  const result = await GestionFichierService.updateFileName(req.user as UserD, id, name);
   return handleServiceResponse(result, res);
 }

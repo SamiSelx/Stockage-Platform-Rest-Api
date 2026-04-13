@@ -186,6 +186,10 @@ export class AuthServices {
     salt: string,
     encryptedRMK: string,
     rmk_iv: string,
+    encryptedRMK_recovery: string, 
+    rmk_recovery_iv: string, 
+    encryptedPrivateKey_recovery: string,
+    privateKey_recovery_iv: string,
     encryptedPrivateKey: string,
     privateKey_iv: string,
     publicKey: string,
@@ -210,7 +214,7 @@ export class AuthServices {
         );
       }
       console.log("inside register - salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
-      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey });
+      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, encryptedRMK_recovery, rmk_recovery_iv, encryptedPrivateKey_recovery, privateKey_recovery_iv });
       await user.save();
       console.log("user ",user)
       const token = Sign({ _id: user._id.toString(), role: user.role });
@@ -614,4 +618,70 @@ export class AuthServices {
       );
     }
   };
+
+  static executeGetPublicAuthData = async (email: string): Promise<ResponseT> => {
+  try {
+    const user = await UserModel.findOne({ email }).select(
+  "salt publicKey encryptedRMK_recovery rmk_recovery_iv encryptedPrivateKey_recovery privateKey_recovery_iv"
+);
+    if (!user) {
+      return new ErrorResponseC("Utilisateur introuvable", HttpCodes.NotFound.code, null);
+    }
+    return new SuccessResponseC(
+      "success",
+      {
+        salt: user.salt,
+        encryptedRMK_recovery: user.encryptedRMK_recovery,
+        rmk_recovery_iv: user.rmk_recovery_iv,
+        encryptedPrivateKey_recovery: user.encryptedPrivateKey_recovery,
+        privateKey_recovery_iv: user.privateKey_recovery_iv,  
+      },
+      "Données récupérées",
+      HttpCodes.OK.code
+    );
+  } catch (err) {
+    return new ErrorResponseC(
+      "Erreur serveur",
+      HttpCodes.InternalServerError.code,
+      err
+    );
+  }
+};
+
+  static executeResetPasswordWithRecoveryKey = async (
+  email: string,
+  newPassword: string,
+  newEncryptedRMK: string,
+  newRmk_iv: string,
+  newEncryptedPrivateKey: string, 
+  newPrivateKey_iv: string,       
+): Promise<ResponseT> => {
+  try {
+    const user = await UserModel.findOne({ email });
+    if (!user) {
+      return new ErrorResponseC("Utilisateur introuvable", HttpCodes.NotFound.code, null);
+    }
+
+  
+    user.password = newPassword;
+    user.encryptedRMK = newEncryptedRMK;
+    user.rmk_iv = newRmk_iv;
+    user.encryptedPrivateKey = newEncryptedPrivateKey; 
+    user.privateKey_iv = newPrivateKey_iv; 
+    await user.save(); 
+
+    return new SuccessResponseC(
+      "success",
+      null,
+      "Mot de passe réinitialisé avec succès",
+      HttpCodes.OK.code
+    );
+  } catch (err) {
+    return new ErrorResponseC(
+      "Erreur lors de la réinitialisation",
+      HttpCodes.InternalServerError.code,
+      err
+    );
+  }
+};
 }

@@ -55,3 +55,10 @@ export async function supprimerDossierDefinitivement(req: MyRequest<UserD>, res:
   const result = await GestionDossierService.deleteFolderPermanently(req.user as UserD, id);
   return handleServiceResponse(result, res);
 }
+
+export async function updateFolderName(req: MyRequest<UserD>, res: Response) {
+  const { id } = req.params;
+  const { name } = req.body as { name: string };
+  const result = await GestionDossierService.updateFolderName(req.user as UserD, id, name);
+  return handleServiceResponse(result, res);
+}

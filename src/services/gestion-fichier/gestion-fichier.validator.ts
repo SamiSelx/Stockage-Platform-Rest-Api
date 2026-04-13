@@ -49,3 +49,13 @@ export const shareFileValidators = [
   body("encryptedFK").notEmpty().isString().withMessage("Encrypted file key is required"),
   // body("fk_iv").notEmpty().isString().withMessage("IV is required"),
 ];
+
+export const updateFileNameValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du fichier est invalide"),
+  body("name")
+    .trim()
+    .notEmpty()
+    .withMessage("Le nom du fichier est obligatoire")
+    .isLength({ min: 1, max: 255 })
+    .withMessage("Le nom du fichier doit contenir entre 1 et 255 caractères"),
+];

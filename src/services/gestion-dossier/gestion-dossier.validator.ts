@@ -35,3 +35,15 @@ export const suppressionDefinitiveDossierValidators = [
 export const getFolderByIdValidators = [
   param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
 ];
+
+export const updateFolderNameValidators = [
+  param("id").isMongoId().withMessage("L'identifiant du dossier est invalide"),
+  body("name")
+    .trim()
+    .notEmpty()
+    .withMessage("Le nom du dossier est obligatoire")
+    .isLength({ min: 2, max: 120 })
+    .withMessage("Le nom du dossier doit contenir entre 2 et 120 caractères")
+    .matches(/^[^<>:"/\\|?*\x00-\x1F]+$/)
+    .withMessage("Le nom du dossier contient des caractères non autorisés"),
+];

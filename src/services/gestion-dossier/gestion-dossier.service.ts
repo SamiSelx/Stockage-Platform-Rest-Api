@@ -599,4 +599,55 @@ export class GestionDossierService {
       );
     }
   }
+
+  static async updateFolderName(user: UserD, folderId: string, newName: string): Promise<ResponseT> {
+    try {
+      const userId = user._id!.toString();
+      const folder = await this.findOwnedFolderOrNull(userId, folderId);
+
+      if (!folder) {
+        return new ErrorResponseC(
+          "Dossier introuvable",
+          HttpCodes.NotFound.code,
+          null,
+        );
+      }
+
+      // Check if the new name already exists in the same parent folder
+      const existingFolder = await DossierModel.findOne({
+        owner: user._id,
+        parentFolder: folder.parentFolder,
+        name: newName,
+        _id: { $ne: folder._id }, // Exclude the current folder
+      });
+
+      if (existingFolder) {
+        return new ErrorResponseC(
+          "Un dossier avec ce nom existe déjà à cet emplacement",
+          HttpCodes.Conflict.code,
+          null,
+        );
+      }
+
+      // Update the folder name
+      const updatedFolder = await DossierModel.findByIdAndUpdate(
+        folder._id,
+        { $set: { name: newName } },
+        { new: true }
+      ).populate("owner");
+
+      return new SuccessResponseC(
+        "success",
+        this.serializeFolder(updatedFolder as DossierD),
+        "Dossier renommé avec succès",
+        HttpCodes.OK.code,
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la modification du nom du dossier",
+        HttpCodes.InternalServerError.code,
+        error,
+      );
+    }
+  }
 }

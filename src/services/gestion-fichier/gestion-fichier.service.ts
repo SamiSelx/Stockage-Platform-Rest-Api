@@ -312,6 +312,24 @@ export class GestionFichierService {
       await ensureDirectoryExists(targetDirectory);
 
       const storedFileName = createStoredFileName(file.originalname);
+
+      // Check if file with this name and type already exists in the target folder
+      const existingFile = await FichierModel.findOne({
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        owner: user._id,
+        folderId: targetFolder ? targetFolder._id : null,
+      });
+
+      if (existingFile) {
+        await deleteFileIfExists(file.path);
+        return new ErrorResponseC(
+          "Un fichier portant ce nom et ce type existe déjà dans ce dossier",
+          HttpCodes.Conflict.code,
+          null
+        );
+      }
+
       finalAbsolutePath = path.join(targetDirectory, storedFileName);
       await fs.rename(file.path, finalAbsolutePath);
 
@@ -596,6 +614,48 @@ export class GestionFichierService {
       );
     }
   }
+
+static async getBulkDownloadableFiles(user: UserD, fileIds: string[]): Promise<ResponseT> {
+  try {
+    const files = await Promise.all(
+      fileIds.map((id) => this.findAccessibleFile(user._id!.toString(), id))
+    );
+
+    const validFiles = files.filter((file): file is FichierD => file !== null);
+
+    if (!validFiles.length) {
+      return new ErrorResponseC("Aucun fichier trouvable", HttpCodes.NotFound.code, null);
+    }
+
+    const filesData = await Promise.all(
+      validFiles.map(async (file) => {
+        const absoluteFilePath = path.join(
+          getUserStorageRoot(file.owner.toString()),
+          file.path
+        );
+        await fs.access(absoluteFilePath);
+
+        return {
+          file: this.serializeFile(file),
+          filePath: absoluteFilePath,
+        };
+      })
+    );
+
+    return new SuccessResponseC(
+      "success",
+      { files: filesData },
+      "Fichiers prêts pour le téléchargement",
+      HttpCodes.OK.code
+    );
+  } catch (error) {
+    return new ErrorResponseC(
+      "Impossible de préparer le téléchargement",
+      HttpCodes.InternalServerError.code,
+      error
+    );
+  }
+}
 
   static async archiveFile(user: UserD, fileId: string): Promise<ResponseT> {
     try {
@@ -1044,4 +1104,58 @@ export class GestionFichierService {
   }
 };
 
+  static async updateFileName(
+    user: UserD,
+    fileId: string,
+    newName: string
+  ): Promise<ResponseT> {
+    try {
+      const userId = user._id!.toString();
+      const file = await this.findOwnedFile(userId, fileId);
+
+      if (!file) {
+        return new ErrorResponseC(
+          "Fichier introuvable",
+          HttpCodes.NotFound.code,
+          null
+        );
+      }
+
+      // Check if the new name already exists in the same folder
+      const existingFile = await FichierModel.findOne({
+        owner: user._id,
+        folderId: file.folderId,
+        filename: newName,
+        _id: { $ne: file._id }, // Exclude the current file
+      });
+
+      if (existingFile) {
+        return new ErrorResponseC(
+          "Un fichier avec ce nom existe déjà à cet emplacement",
+          HttpCodes.Conflict.code,
+          null
+        );
+      }
+
+      // Update the file name
+      const updatedFile = await FichierModel.findByIdAndUpdate(
+        file._id,
+        { $set: { filename: newName } },
+        { new: true }
+      ).populate("owner");
+
+      return new SuccessResponseC(
+        "success",
+        this.serializeFile(updatedFile as FichierD),
+        "Fichier renommé avec succès",
+        HttpCodes.OK.code
+      );
+    } catch (error) {
+      return new ErrorResponseC(
+        "Erreur lors de la modification du nom du fichier",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
 }
