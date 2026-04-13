@@ -7,6 +7,7 @@ import {
   restaurerDossier,
   supprimerDossier,
   supprimerDossierDefinitivement,
+  updateFolderName,
 } from "../controller/gestion-dossier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { normaliserNavigationStockage } from "../middleware/navigation-stockage.middleware";
@@ -18,6 +19,7 @@ import {
   restaurationDossierValidators,
   suppressionDefinitiveDossierValidators,
   suppressionDossierValidators,
+  updateFolderNameValidators,
 } from "../services/gestion-dossier/gestion-dossier.validator";
 
 const gestionDossierRouter = Router();
@@ -84,6 +86,15 @@ gestionDossierRouter.delete(
   suppressionDossierValidators,
   validator,
   supprimerDossier
+);
+
+gestionDossierRouter.patch(
+  "/:id/rename",
+  checkLogs,
+  isLoggedIn,
+  updateFolderNameValidators,
+  validator,
+  updateFolderName
 );
 
 export default gestionDossierRouter;
