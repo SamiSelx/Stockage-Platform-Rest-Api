@@ -27,7 +27,17 @@ export type IAuthLogs =
   | "REGISTER_ERROR_EMAIL_EXIST"
   | "REGISTER_ERROR_PASSWORD"
   | "USER_ISN_T_ENABLED"
-  | "LOGOUT_ERROR_GENERIC";
+  | "LOGOUT_ERROR_GENERIC"
+  | "GET_CRYPTO_MATERIAL_SUCCESS"
+  | "CHANGE_PASSWORD_SUCCESS"
+  | "CHANGE_PASSWORD_ERROR_WRONG_PASSWORD"
+  | "CHANGE_PASSWORD_ERROR_GENERIC"
+  | "CERTIFICATE_ENROLL_SUCCESS"
+  | "CERTIFICATE_ENROLL_ERROR_GENERIC"
+  | "IDENTITY_CHALLENGE_START_SUCCESS"
+  | "IDENTITY_CHALLENGE_START_ERROR_GENERIC"
+  | "IDENTITY_CHALLENGE_VERIFY_SUCCESS"
+  | "IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC";
 
 export const authLogs: IErrors<IAuthLogs> = {
   LOGIN_SUCCESS: {
@@ -176,7 +186,57 @@ export const authLogs: IErrors<IAuthLogs> = {
     code: 34,
     message: "Une erreur s'est produite lors de la déconnexion de l'utilisateur '{email}': {error}",
     type: "LOGOUT_ERROR_GENERIC",
-  }
+  },
+  GET_CRYPTO_MATERIAL_SUCCESS: {
+    code: 35,
+    message: "Les informations cryptographiques ont été récupérées avec succès pour {email}",
+    type: "GET_CRYPTO_MATERIAL_SUCCESS",
+  },
+  CHANGE_PASSWORD_SUCCESS: {
+    code: 36,
+    message: "Le mot de passe et les informations cryptographiques ont été mis à jour avec succès pour {email}",
+    type: "CHANGE_PASSWORD_SUCCESS",
+  },
+  CHANGE_PASSWORD_ERROR_WRONG_PASSWORD: {
+    code: 37,
+    message: "Échec de la mise à jour du mot de passe, ancien mot de passe incorrect pour {email}",
+    type: "CHANGE_PASSWORD_ERROR_WRONG_PASSWORD",
+  },
+  CHANGE_PASSWORD_ERROR_GENERIC: {
+    code: 38,
+    message: "Une erreur s'est produite lors de la mise à jour du mot de passe pour {email}: {error}",
+    type: "CHANGE_PASSWORD_ERROR_GENERIC",
+  },
+  CERTIFICATE_ENROLL_SUCCESS: {
+    code: 39,
+    message: "Le certificat d'identité a été émis avec succès pour {email}",
+    type: "CERTIFICATE_ENROLL_SUCCESS",
+  },
+  CERTIFICATE_ENROLL_ERROR_GENERIC: {
+    code: 40,
+    message: "Une erreur s'est produite lors de l'émission du certificat pour {email}: {error}",
+    type: "CERTIFICATE_ENROLL_ERROR_GENERIC",
+  },
+  IDENTITY_CHALLENGE_START_SUCCESS: {
+    code: 41,
+    message: "Le challenge d'identité a été généré avec succès pour {email}",
+    type: "IDENTITY_CHALLENGE_START_SUCCESS",
+  },
+  IDENTITY_CHALLENGE_START_ERROR_GENERIC: {
+    code: 42,
+    message: "Une erreur s'est produite lors de la génération du challenge pour {email}: {error}",
+    type: "IDENTITY_CHALLENGE_START_ERROR_GENERIC",
+  },
+  IDENTITY_CHALLENGE_VERIFY_SUCCESS: {
+    code: 43,
+    message: "Le challenge d'identité a été vérifié avec succès pour {email}",
+    type: "IDENTITY_CHALLENGE_VERIFY_SUCCESS",
+  },
+  IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC: {
+    code: 44,
+    message: "Une erreur s'est produite lors de la vérification du challenge pour {email}: {error}",
+    type: "IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC",
+  },
 } as const;
 
 export default authLogs;

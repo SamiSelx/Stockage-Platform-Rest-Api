@@ -13,9 +13,9 @@ export interface UploadedFile {
   mimetype: string;
   size: number;
   encryptedData: Buffer;
-  encryptedFK: Buffer;
-  file_iv: Buffer;
-  fk_iv: Buffer;
+  encryptedFK: Buffer | string;
+  file_iv: Buffer | string;
+  fk_iv: Buffer | string;
   path: string; // Path to the temporarily stored uploaded file
 }
 
@@ -32,25 +32,13 @@ function handleServiceResponse(result: ResponseT, res: Response) {
 
 export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
   const { folderId, mimetype, size, originalName, encryptedFK, file_iv, fk_iv } = req.body;
-  // const { folderId } = req.body as { folderId?: string };
-  // The uploaded encrypted file
     const uploadedFile = req.file;
     if (!uploadedFile) {
       return ErrorResponse(res, 400, "No file uploaded", "No file was uploaded in the request.");
     }
-  // const encryptedData = Buffer.from(req.body.encryptedData, "base64");
-  // const encryptedFK = Buffer.from(req.body.encryptedFK, "base64");
-  // const file_iv = Buffer.from(req.body.file_iv, "base64");
-  // const fk_iv = Buffer.from(req.body.fk_iv, "base64");
 
-  console.log("Received file upload request:", uploadedFile.path, uploadedFile.originalname, uploadedFile.mimetype, uploadedFile.size);
    // Read the encrypted file into buffer
-    const encryptedData = await fsp.readFile(uploadedFile.path);
-
-    // Convert the FK and IVs from base64 to buffers
-    // const fkBuffer = encryptedFK
-    // const fileIVBuffer = file_iv
-    // const fkIVBuffer = fk_iv
+  const encryptedData = await fsp.readFile(uploadedFile.path);
 
   const file: UploadedFile = {
     originalname: originalName || "unknown",
@@ -60,7 +48,7 @@ export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
     encryptedFK,
     file_iv,
     fk_iv,
-    path: uploadedFile.path, // Add the path to the uploaded file for later cleanup
+    path: uploadedFile.path,
   };
 
 
@@ -74,6 +62,79 @@ export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
     return ErrorResponse(res, result.code, result.message, result.error);
   }
 }
+
+export async function televerserPlusieursFichiers(req: MyRequest<UserD>, res: Response) {
+  const { folderId, mimetype, size, originalName, encryptedFK, file_iv, fk_iv } = req.body;
+  const uploadedFiles = (req.files as Express.Multer.File[]) || [];
+
+  if (!uploadedFiles.length) {
+    return ErrorResponse(res, 400, "No files uploaded", "No files were uploaded in the request.");
+  }
+
+  const files: UploadedFile[] = uploadedFiles.map((uploadedFile, index) => {
+    const normalizedOriginalName = Array.isArray(originalName)
+      ? originalName[index] || uploadedFile.originalname
+      : originalName || uploadedFile.originalname;
+
+    const normalizedMimetype = Array.isArray(mimetype)
+      ? mimetype[index] || uploadedFile.mimetype
+      : mimetype || uploadedFile.mimetype;
+
+    const normalizedSize = Array.isArray(size)
+      ? Number(size[index] || uploadedFile.size)
+      : Number(size || uploadedFile.size);
+
+    const normalizedEncryptedFK = Array.isArray(encryptedFK)
+  ? encryptedFK[index] ?? (() => { throw new Error(`Missing encryptedFK for file at index ${index}`) })()
+  : encryptedFK;
+
+    const normalizedFileIv = Array.isArray(file_iv)
+      ? file_iv[index] || file_iv[0]
+      : file_iv;
+
+    const normalizedFkIv = Array.isArray(fk_iv)
+      ? fk_iv[index] || fk_iv[0]
+      : fk_iv;
+
+    return {
+      originalname: normalizedOriginalName,
+      mimetype: normalizedMimetype,
+      size: normalizedSize,
+      encryptedData: Buffer.alloc(0),
+      encryptedFK: normalizedEncryptedFK,
+      file_iv: normalizedFileIv,
+      fk_iv: normalizedFkIv,
+      path: uploadedFile.path,
+    };
+  });
+
+  const result = await GestionFichierService.uploadMultipleFiles(req.user as UserD, files, folderId);
+
+  if (result instanceof SuccessResponseC) {
+    return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  }
+
+  if (result instanceof ErrorResponseC) {
+    return ErrorResponse(res, result.code, result.message, result.error);
+  }
+}
+
+export const ShareFile = async (req: MyRequest<UserD>, res: Response) => {
+  const { fileId } = req.params;
+  const { recipientId, encryptedFK } = req.body;
+
+  const result = await GestionFichierService.executeShareFile(fileId, recipientId, encryptedFK);
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
+
+export const GetSharedFiles = async (req: MyRequest<UserD>, res: Response) => {
+  const recipientId = (req.user as UserD)._id!.toString();
+
+  const result = await GestionFichierService.executeGetSharedFiles(recipientId);
+  if (result instanceof SuccessResponseC) return SuccessResponse(res, result.code, result.data, result.message, result.status);
+  if (result instanceof ErrorResponseC) return ErrorResponse(res, result.code, result.message, result.error);
+};
 
 // export async function televerserFichier(req: MyRequest<UserD>, res: Response) {
 //   const { folderId } = req.body as { folderId?: string };

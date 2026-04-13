@@ -32,6 +32,8 @@ const usersSchema = new Schema<UserI>(
     publicKey: { type: String, required: true },
     encryptedPrivateKey: { type: String, required: true },
     privateKey_iv: { type: String, required: true },
+    identityCertificate: { type: String, default: null },
+    identityCertSignature: { type: String, default: null },
   },
   {
     timestamps: true,

@@ -2,16 +2,19 @@ import { Router } from "express";
 import {
   deplacerFichier,
   getRecentFiles,
+  GetSharedFiles,
   getStarredFiles,
   getStatistics,
   getTrashFiles,
   listerFichiers,
   restaurerFichier,
   setStarredFile,
+  ShareFile,
   supprimerFichier,
   supprimerFichierDefinitivement,
   telechargerFichier,
   televerserFichier,
+  televerserPlusieursFichiers,
 } from "../controller/gestion-fichier.controller";
 import { checkLogs, isLoggedIn } from "../middleware/auth";
 import { uploadFichierMiddleware } from "../middleware/gestion-fichier.middleware";
@@ -22,6 +25,7 @@ import {
   listeFichiersValidators,
   recentFilesValidators,
   restaurationFichierValidators,
+  shareFileValidators,
   starredFileValidators,
   suppressionDefinitiveFichierValidators,
   suppressionFichierValidators,
@@ -41,6 +45,17 @@ gestionFichierRouter.post(
   uploadFichierValidators,
   validator,
   televerserFichier
+);
+
+gestionFichierRouter.post(
+  "/upload-multiple",
+  checkLogs,
+  isLoggedIn,
+  uploadFichierMiddleware.array("file"),
+  normaliserNavigationStockage,
+  uploadFichierValidators,
+  validator,
+  televerserPlusieursFichiers
 );
 
 gestionFichierRouter.get(
@@ -136,5 +151,13 @@ gestionFichierRouter.delete(
   validator,
   supprimerFichier
 );
+
+gestionFichierRouter
+  .route("/:fileId/share")
+  .post(checkLogs, isLoggedIn, shareFileValidators, validator, ShareFile);
+
+  gestionFichierRouter
+  .route("/shared")
+  .get(checkLogs, isLoggedIn, GetSharedFiles);
 
 export default gestionFichierRouter;

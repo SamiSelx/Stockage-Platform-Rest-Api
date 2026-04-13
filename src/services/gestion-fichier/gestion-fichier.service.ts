@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import crypto from "crypto";
 import { Types } from "mongoose";
 import { HttpCodes } from "../../config/Errors";
 import { DossierModel } from "../../db/models/dossier";
@@ -17,6 +16,9 @@ import {
   resolveFolderAbsolutePath,
 } from "../../utils/stockage";
 import { UploadedFile } from "../../controller/gestion-fichier.controller";
+import fileLogs, { fileLogger } from "./file.logs";
+import { formatString } from "../../utils/Strings";
+import { FileShareModel } from "../../db/models/fileShare";
 
 export class GestionFichierService {
   private static detectFileType(file: Pick<FichierD, "filename" | "mimetype">) {
@@ -101,6 +103,50 @@ export class GestionFichierService {
 
     return FichierModel.findOne(query);
   }
+
+
+  private static async findAccessibleFile(
+  userId: string,
+  fileId: string,
+  options?: { includeArchived?: boolean }
+): Promise<FichierD | null> {
+  const objectUserId = new Types.ObjectId(userId);
+  const objectFileId = new Types.ObjectId(fileId);
+
+  const query: Record<string, unknown> = {
+    _id: objectFileId,
+  };
+
+  if (!options?.includeArchived) {
+    query.isArchived = false;
+  }
+
+  let file = await FichierModel.findOne({
+    ...query,
+    owner: objectUserId,
+  });
+
+  if (file) {
+    return file;
+  }
+
+  const share = await FileShareModel.findOne({
+    recipientId: objectUserId,
+    fileId: objectFileId,
+  }).populate("fileId");
+
+  if (!share || !share.fileId) {
+    return null;
+  }
+
+  const sharedFile = share.fileId as unknown as FichierD;
+
+  if (!options?.includeArchived && sharedFile.isArchived) {
+    return null;
+  }
+
+  return sharedFile;
+}
 
 
 // static async uploadFile(
@@ -317,6 +363,113 @@ export class GestionFichierService {
     }
   }
 
+  static async uploadMultipleFiles(
+    user: UserD,
+    files: UploadedFile[],
+    folderId?: string
+  ): Promise<ResponseT> {
+    if (!files?.length) {
+      return new ErrorResponseC("Aucun fichier n'a été envoyé", HttpCodes.BadRequest.code, null);
+    }
+
+    const createdFileIds: Types.ObjectId[] = [];
+    const movedFilePaths: string[] = [];
+
+    try {
+      const userId = user._id!.toString();
+      const targetFolder = await this.findOwnedFolderOrNull(userId, folderId);
+
+      if (folderId && !targetFolder) {
+        await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+        return new ErrorResponseC(
+          "Le dossier cible est introuvable",
+          HttpCodes.NotFound.code,
+          null
+        );
+      }
+
+      const totalSize = files.reduce((acc, file) => acc + Number(file.size || 0), 0);
+
+      if (user.storageUsed + totalSize > user.storageLimit) {
+        await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+        return new ErrorResponseC(
+          "Quota de stockage dépassé",
+          HttpCodes.PayloadTooLarge.code,
+          {
+            storageUsed: user.storageUsed,
+            storageLimit: user.storageLimit,
+            requestedSize: totalSize,
+          }
+        );
+      }
+
+      await ensureUserStorageRoot(userId);
+
+      const targetDirectory = resolveFolderAbsolutePath(userId, targetFolder?.storagePath);
+      await ensureDirectoryExists(targetDirectory);
+
+      const createdFiles: FichierD[] = [];
+
+      for (const file of files) {
+        const storedFileName = createStoredFileName(file.originalname);
+        const finalAbsolutePath = path.join(targetDirectory, storedFileName);
+
+        await fs.rename(file.path, finalAbsolutePath);
+        movedFilePaths.push(finalAbsolutePath);
+
+        const relativePath = path.relative(getUserStorageRoot(userId), finalAbsolutePath);
+
+        const createdFile = await FichierModel.create({
+          filename: file.originalname,
+          encryptedFK: file.encryptedFK,
+          file_iv: file.file_iv,
+          fk_iv: file.fk_iv,
+          encryptedFilename: storedFileName,
+          size: file.size,
+          path: relativePath,
+          owner: user._id,
+          folderId: targetFolder ? targetFolder._id : null,
+          mimetype: file.mimetype,
+          isArchived: false,
+          isStarred: false,
+        });
+
+        createdFileIds.push(createdFile._id as Types.ObjectId);
+        createdFiles.push(createdFile);
+      }
+
+      const updatedStorageUsed = user.storageUsed + totalSize;
+      await UserModel.updateOne({ _id: user._id }, { $set: { storageUsed: updatedStorageUsed } });
+
+      return new SuccessResponseC(
+        "success",
+        {
+          files: createdFiles.map((createdFile) => this.serializeFile(createdFile)),
+          storage: {
+            storageUsed: updatedStorageUsed,
+            storageLimit: user.storageLimit,
+            storageRemaining: Math.max(0, user.storageLimit - updatedStorageUsed),
+          },
+        },
+        "Fichiers téléversés avec succès",
+        HttpCodes.Created.code
+      );
+    } catch (error) {
+      if (createdFileIds.length) {
+        await FichierModel.deleteMany({ _id: { $in: createdFileIds } });
+      }
+
+      await Promise.all(movedFilePaths.map((filePath) => deleteFileIfExists(filePath)));
+      await Promise.all(files.map((file) => deleteFileIfExists(file.path)));
+
+      return new ErrorResponseC(
+        "Erreur lors du téléversement des fichiers",
+        HttpCodes.InternalServerError.code,
+        error
+      );
+    }
+  }
+
   static async listFiles(user: UserD, folderId?: string): Promise<ResponseT> {
     try {
       const userId = user._id!.toString();
@@ -391,14 +544,14 @@ export class GestionFichierService {
 
   static async getDownloadableFile(user: UserD, fileId: string): Promise<ResponseT> {
     try {
-      const file = await this.findOwnedFile(user._id!.toString(), fileId);
+      const file = await this.findAccessibleFile(user._id!.toString(), fileId);
 
       if (!file) {
         return new ErrorResponseC("Fichier introuvable", HttpCodes.NotFound.code, null);
       }
       
 
-      const absoluteFilePath = path.join(getUserStorageRoot(user._id!.toString()), file.path);
+      const absoluteFilePath = path.join(getUserStorageRoot(file.owner.toString()), file.path);
       await fs.access(absoluteFilePath);
       console.log("file path:", absoluteFilePath, file.path);
 
@@ -633,6 +786,8 @@ export class GestionFichierService {
         archivedFolders,
         starredFiles,
         openedFiles,
+        totalSharedFiles,
+        sharedWithMe,
       ] = await Promise.all([
         FichierModel.countDocuments({ owner, isArchived: false }),
         DossierModel.countDocuments({ owner, isArchived: false }),
@@ -640,6 +795,9 @@ export class GestionFichierService {
         DossierModel.countDocuments({ owner, isArchived: true }),
         FichierModel.countDocuments({ owner, isArchived: false, isStarred: true }),
         FichierModel.countDocuments({ owner, isArchived: false, lastOpenedAt: { $ne: null } }),
+        FileShareModel.countDocuments({ fileId: { $in: await FichierModel.find({ owner }).distinct("_id") } }),
+        // FileShareModel.countDocuments({ recipientId: owner }),
+        FileShareModel.distinct("fileId", { recipientId: owner }).then(ids => ids.length),
       ]);
 
       const storageUsed = freshUser?.storageUsed ?? user.storageUsed;
@@ -654,6 +812,8 @@ export class GestionFichierService {
           archivedFolders,
           starredFiles,
           openedFiles,
+          totalSharedFiles,
+          sharedWithMe,
           storage: {
             used: storageUsed,
             total: storageLimit,
@@ -793,4 +953,95 @@ export class GestionFichierService {
       );
     }
   }
+
+   static executeShareFile = async (
+    fileId: string,
+    recipientId: string,
+    encryptedFK: string,
+    // fk_iv: string
+  ): Promise<ResponseT> => {
+    try {
+      const file = await FichierModel.findById(fileId);
+      if (!file) {
+        const msg = formatString(fileLogs.SHARE_FILE_ERROR_FILE_NOT_FOUND.message, { fileId });
+        fileLogger.error(msg);
+        return new ErrorResponseC(
+          fileLogs.SHARE_FILE_ERROR_FILE_NOT_FOUND.type,
+          HttpCodes.NotFound.code,
+          msg
+        );
+      }
+
+      const alreadyShared = await FileShareModel.findOne({ fileId, recipientId });
+      if (alreadyShared) {
+        const msg = formatString(fileLogs.SHARE_FILE_ERROR_ALREADY_SHARED.message, { fileId, recipientId });
+        fileLogger.error(msg);
+        return new ErrorResponseC(
+          fileLogs.SHARE_FILE_ERROR_ALREADY_SHARED.type,
+          HttpCodes.BadRequest.code,
+          msg
+        );
+      }
+
+      const share = new FileShareModel({ fileId, recipientId, encryptedFK });
+      await share.save();
+
+      const msg = formatString(fileLogs.SHARE_FILE_SUCCESS.message, { fileId, recipientId });
+      fileLogger.info(msg, { type: fileLogs.SHARE_FILE_SUCCESS.type });
+
+      return new SuccessResponseC(
+        fileLogs.SHARE_FILE_SUCCESS.type,
+        share.toObject(),
+        msg,
+        HttpCodes.Created.code
+      );
+    } catch (err) {
+      const msg = formatString(fileLogs.SHARE_FILE_ERROR_GENERIC.message, {
+        error: (err as Error)?.message || "",
+        fileId,
+      });
+      fileLogger.error(msg, err as Error);
+      return new ErrorResponseC(
+        fileLogs.SHARE_FILE_ERROR_GENERIC.type,
+        HttpCodes.InternalServerError.code,
+        msg
+      );
+    }
+  };
+
+  static executeGetSharedFiles = async (recipientId: string): Promise<ResponseT> => {
+  try {
+    const shares = await FileShareModel.find({ recipientId })
+      .populate({
+        path: "fileId",
+        populate: { path: "owner" }
+      })
+      .sort({ createdAt: -1 }); 
+
+    const msg = formatString(fileLogs.GET_SHARED_FILES_SUCCESS.message, { recipientId });
+    fileLogger.info(msg, { type: fileLogs.GET_SHARED_FILES_SUCCESS.type });
+
+    return new SuccessResponseC(
+      fileLogs.GET_SHARED_FILES_SUCCESS.type,
+      shares.map((share) => ({
+    ...share.toObject(),
+    fileId: this.serializeFile(((share.fileId as unknown) as FichierD).toObject()),
+  })),
+      msg,
+      HttpCodes.OK.code
+    );
+  } catch (err) {
+    const msg = formatString(fileLogs.GET_SHARED_FILES_ERROR_GENERIC.message, {
+      error: (err as Error)?.message || "",
+      recipientId,
+    });
+    fileLogger.error(msg, err as Error);
+    return new ErrorResponseC(
+      fileLogs.GET_SHARED_FILES_ERROR_GENERIC.type,
+      HttpCodes.InternalServerError.code,
+      msg
+    );
+  }
+};
+
 }
