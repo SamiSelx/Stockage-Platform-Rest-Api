@@ -4,10 +4,15 @@ import { formatString } from "../../utils/Strings";
 import { Sign } from "../../utils/jwt";
 import { HttpCodes } from "../../config/Errors";
 import { ErrorResponseC, SuccessResponseC } from "./../services.response";
-import {Response } from "express";
+import { Response } from "express";
 import { getCookiesSettings } from "../../utils/Function";
 import { emailQueue } from "../../queues/email.queue";
-import { createHmac, createPublicKey, randomBytes, verify as verifySignature } from "crypto";
+import {
+  createHmac,
+  createPublicKey,
+  randomBytes,
+  verify as verifySignature,
+} from "crypto";
 
 type MiniCertificate = {
   certId: string;
@@ -33,8 +38,12 @@ type ChallengeRecord = {
 const identityChallenges = new Map<string, ChallengeRecord>();
 const MINI_CA_ISSUER = process.env.MINI_CA_ISSUER || "MiniCA-Stockage";
 const MINI_CA_SECRET = process.env.MINI_CA_SECRET || "dev-mini-ca-secret";
-const CHALLENGE_TTL_MS = Number(process.env.IDENTITY_CHALLENGE_TTL_MS || 120000);
-const CHALLENGE_SKEW_MS = Number(process.env.IDENTITY_CHALLENGE_SKEW_MS || 120000);
+const CHALLENGE_TTL_MS = Number(
+  process.env.IDENTITY_CHALLENGE_TTL_MS || 120000,
+);
+const CHALLENGE_SKEW_MS = Number(
+  process.env.IDENTITY_CHALLENGE_SKEW_MS || 120000,
+);
 
 function serializeCertificate(certificate: MiniCertificate): string {
   return JSON.stringify(certificate);
@@ -46,11 +55,17 @@ function signCertificate(certificate: MiniCertificate): string {
     .digest("base64");
 }
 
-function verifyCertificateSignature(certificate: MiniCertificate, caSignatureB64: string): boolean {
+function verifyCertificateSignature(
+  certificate: MiniCertificate,
+  caSignatureB64: string,
+): boolean {
   return signCertificate(certificate) === caSignatureB64;
 }
 
-function buildCertificate(user: UserD, signPublicKeySpkiB64: string): MiniCertificate {
+function buildCertificate(
+  user: UserD,
+  signPublicKeySpkiB64: string,
+): MiniCertificate {
   const now = Date.now();
   const notBefore = new Date(now).toISOString();
   const notAfter = new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -75,19 +90,38 @@ function parseBase64Json<T>(base64Value: string): T {
   return JSON.parse(json) as T;
 }
 
-function verifyChallengePayloadSignature(payloadB64: string, signatureB64: string, signPublicKeySpkiB64: string): boolean {
+function verifyChallengePayloadSignature(
+  payloadB64: string,
+  signatureB64: string,
+  signPublicKeySpkiB64: string,
+): boolean {
   const publicKey = createPublicKey({
     key: Buffer.from(signPublicKeySpkiB64, "base64"),
     format: "der",
     type: "spki",
   });
 
-  return verifySignature(
+  const payload = Buffer.from(payloadB64, "base64");
+  const signature = Buffer.from(signatureB64, "base64");
+
+  // Browsers often return ECDSA signatures as IEEE-P1363 (r||s),
+  // while some clients/backends use DER. Accept both formats.
+  const derOk = verifySignature(
     "sha256",
-    Buffer.from(payloadB64, "base64"),
-    publicKey,
-    Buffer.from(signatureB64, "base64"),
+    payload,
+    { key: publicKey, dsaEncoding: "der" },
+    signature,
   );
+  if (derOk) return true;
+
+  const p1363Ok = verifySignature(
+    "sha256",
+    payload,
+    { key: publicKey, dsaEncoding: "ieee-p1363" },
+    signature,
+  );
+
+  return p1363Ok;
 }
 
 function getChallengeOrNull(challengeId: string): ChallengeRecord | null {
@@ -113,7 +147,7 @@ export class AuthServices {
     email: string,
     password: string,
     stay: boolean,
-    res: Response
+    res: Response,
   ): Promise<ResponseT> => {
     try {
       const user = await UserModel.findOne({ email });
@@ -124,26 +158,25 @@ export class AuthServices {
           const resp: ICode<IAuthLogs> = authLogs.LOGIN_SUCCESS;
           const msg = formatString(resp.message, user.toObject());
           authLogger.info(msg, { type: resp.type });
-          
+
           res.cookie("token", token, getCookiesSettings(stay));
 
           return new SuccessResponseC(
             resp.type,
-            { ...user.Optimize() , token: token},
+            { ...user.Optimize(), token: token },
             msg,
-            HttpCodes.Accepted.code
+            HttpCodes.Accepted.code,
           );
-          
         }
         const msg = formatString(
           authLogs.LOGIN_ERROR_INCORRECT_PASSWORD_FOUND.message,
-          { email }
+          { email },
         );
         authLogger.error(msg);
         return new ErrorResponseC(
           authLogs.LOGIN_ERROR_INCORRECT_PASSWORD_FOUND.type,
           HttpCodes.Unauthorized.code,
-          msg
+          msg,
         );
       }
       const msg = formatString(authLogs.LOGIN_ERROR_EMAIL_NOT_FOUND.message, {
@@ -153,7 +186,7 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.LOGIN_ERROR_EMAIL_NOT_FOUND.type,
         HttpCodes.NotFound.code,
-        msg
+        msg,
       );
     } catch (err) {
       const msg = formatString(authLogs.LOGIN_ERROR_GENERIC.message, {
@@ -164,7 +197,7 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.LOGIN_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
@@ -186,17 +219,16 @@ export class AuthServices {
     salt: string,
     encryptedRMK: string,
     rmk_iv: string,
-    encryptedRMK_recovery: string, 
-    rmk_recovery_iv: string, 
+    encryptedRMK_recovery: string,
+    rmk_recovery_iv: string,
     encryptedPrivateKey_recovery: string,
     privateKey_recovery_iv: string,
     encryptedPrivateKey: string,
     privateKey_iv: string,
     publicKey: string,
     stay: boolean,
-    
-     res : Response,
 
+    res: Response,
   ): Promise<ResponseT> => {
     try {
       const userExist = await UserModel.findOne({
@@ -210,13 +242,35 @@ export class AuthServices {
         return new ErrorResponseC(
           authLogs.REGISTER_ERROR_EMAIL_EXIST.type,
           HttpCodes.BadRequest.code,
-          msg
+          msg,
         );
       }
-      console.log("inside register - salt ",salt, " encryptedRMK ", encryptedRMK, " rmk_iv ", rmk_iv);
-      const user = new UserModel({ email, password, firstName, lastName, salt, encryptedRMK, rmk_iv, encryptedPrivateKey, privateKey_iv, publicKey, encryptedRMK_recovery, rmk_recovery_iv, encryptedPrivateKey_recovery, privateKey_recovery_iv });
+      console.log(
+        "inside register - salt ",
+        salt,
+        " encryptedRMK ",
+        encryptedRMK,
+        " rmk_iv ",
+        rmk_iv,
+      );
+      const user = new UserModel({
+        email,
+        password,
+        firstName,
+        lastName,
+        salt,
+        encryptedRMK,
+        rmk_iv,
+        encryptedPrivateKey,
+        privateKey_iv,
+        publicKey,
+        encryptedRMK_recovery,
+        rmk_recovery_iv,
+        encryptedPrivateKey_recovery,
+        privateKey_recovery_iv,
+      });
       await user.save();
-      console.log("user ",user)
+      console.log("user ", user);
       const token = Sign({ _id: user._id.toString(), role: user.role });
       res.cookie("token", token, getCookiesSettings(stay));
       const resp: ICode<IAuthLogs> = authLogs.REGISTER_SUCCESS;
@@ -233,7 +287,7 @@ export class AuthServices {
         resp.type,
         { ...user.Optimize(), token: token },
         msg,
-        HttpCodes.Created.code
+        HttpCodes.Created.code,
       );
     } catch (err) {
       const msg = formatString(authLogs.REGISTER_ERROR_GENERIC.message, {
@@ -244,11 +298,15 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.REGISTER_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
-  static executeAuthBack = async (user: UserD , stay : boolean , res : Response) => {
+  static executeAuthBack = async (
+    user: UserD,
+    stay: boolean,
+    res: Response,
+  ) => {
     try {
       let msg = formatString(authLogs.AUTH_BACK.message, {
         email: user.email,
@@ -261,7 +319,7 @@ export class AuthServices {
         authLogs.AUTH_BACK.type,
         user.Optimize(),
         msg,
-        HttpCodes.Accepted.code
+        HttpCodes.Accepted.code,
       );
     } catch (err) {
       const msg = formatString(authLogs.AUTH_ERROR_GENERIC.message, {
@@ -272,12 +330,12 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.AUTH_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
 
-  static executeLogout = async (user: UserD , res : Response) => {
+  static executeLogout = async (user: UserD, res: Response) => {
     try {
       let msg = formatString(authLogs.LOGOUT_SUCCESS.message, {
         email: user.email,
@@ -290,7 +348,7 @@ export class AuthServices {
         authLogs.LOGOUT_SUCCESS.type,
         null,
         msg,
-        HttpCodes.Accepted.code
+        HttpCodes.Accepted.code,
       );
     } catch (err) {
       const msg = formatString(authLogs.LOGOUT_ERROR_GENERIC.message, {
@@ -301,7 +359,7 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.LOGOUT_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
@@ -321,7 +379,7 @@ export class AuthServices {
           rmk_iv: user.rmk_iv,
         },
         msg,
-        HttpCodes.OK.code
+        HttpCodes.OK.code,
       );
     } catch (err) {
       const msg = formatString(authLogs.CHANGE_PASSWORD_ERROR_GENERIC.message, {
@@ -332,7 +390,7 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.CHANGE_PASSWORD_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
@@ -343,14 +401,14 @@ export class AuthServices {
     newPassword: string,
     salt: string,
     encryptedRMK: string,
-    rmk_iv: string
+    rmk_iv: string,
   ): Promise<ResponseT> => {
     try {
       const isPasswordMatch = await user.comparePasswords(oldPassword);
       if (!isPasswordMatch) {
         const msg = formatString(
           authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.message,
-          { email: user.email }
+          { email: user.email },
         );
         authLogger.error(msg, {
           type: authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.type,
@@ -358,7 +416,7 @@ export class AuthServices {
         return new ErrorResponseC(
           authLogs.CHANGE_PASSWORD_ERROR_WRONG_PASSWORD.type,
           HttpCodes.Unauthorized.code,
-          msg
+          msg,
         );
       }
 
@@ -376,7 +434,7 @@ export class AuthServices {
         authLogs.CHANGE_PASSWORD_SUCCESS.type,
         null,
         msg,
-        HttpCodes.OK.code
+        HttpCodes.OK.code,
       );
     } catch (err) {
       const msg = formatString(authLogs.CHANGE_PASSWORD_ERROR_GENERIC.message, {
@@ -387,7 +445,7 @@ export class AuthServices {
       return new ErrorResponseC(
         authLogs.CHANGE_PASSWORD_ERROR_GENERIC.type,
         HttpCodes.InternalServerError.code,
-        msg
+        msg,
       );
     }
   };
@@ -417,15 +475,24 @@ export class AuthServices {
 
       return new SuccessResponseC(
         authLogs.CERTIFICATE_ENROLL_SUCCESS.type,
-        { certificate, caSignatureB64, caCertFingerprint: createHmac("sha256", MINI_CA_SECRET).update("mini-ca").digest("hex") },
+        {
+          certificate,
+          caSignatureB64,
+          caCertFingerprint: createHmac("sha256", MINI_CA_SECRET)
+            .update("mini-ca")
+            .digest("hex"),
+        },
         msg,
         HttpCodes.Created.code,
       );
     } catch (err) {
-      const msg = formatString(authLogs.CERTIFICATE_ENROLL_ERROR_GENERIC.message, {
-        email: user.email,
-        error: (err as Error)?.message || "",
-      });
+      const msg = formatString(
+        authLogs.CERTIFICATE_ENROLL_ERROR_GENERIC.message,
+        {
+          email: user.email,
+          error: (err as Error)?.message || "",
+        },
+      );
       authLogger.error(msg, err as Error);
       return new ErrorResponseC(
         authLogs.CERTIFICATE_ENROLL_ERROR_GENERIC.type,
@@ -451,10 +518,15 @@ export class AuthServices {
       };
       identityChallenges.set(challengeId, record);
 
-      const msg = formatString(authLogs.IDENTITY_CHALLENGE_START_SUCCESS.message, {
-        email: user.email,
+      const msg = formatString(
+        authLogs.IDENTITY_CHALLENGE_START_SUCCESS.message,
+        {
+          email: user.email,
+        },
+      );
+      authLogger.info(msg, {
+        type: authLogs.IDENTITY_CHALLENGE_START_SUCCESS.type,
       });
-      authLogger.info(msg, { type: authLogs.IDENTITY_CHALLENGE_START_SUCCESS.type });
 
       return new SuccessResponseC(
         authLogs.IDENTITY_CHALLENGE_START_SUCCESS.type,
@@ -469,10 +541,13 @@ export class AuthServices {
         HttpCodes.OK.code,
       );
     } catch (err) {
-      const msg = formatString(authLogs.IDENTITY_CHALLENGE_START_ERROR_GENERIC.message, {
-        email: user.email,
-        error: (err as Error)?.message || "",
-      });
+      const msg = formatString(
+        authLogs.IDENTITY_CHALLENGE_START_ERROR_GENERIC.message,
+        {
+          email: user.email,
+          error: (err as Error)?.message || "",
+        },
+      );
       authLogger.error(msg, err as Error);
       return new ErrorResponseC(
         authLogs.IDENTITY_CHALLENGE_START_ERROR_GENERIC.type,
@@ -502,7 +577,10 @@ export class AuthServices {
         );
       }
 
-      if (challenge.userId !== user.id.toString() || challenge.email !== user.email) {
+      if (
+        challenge.userId !== user.id.toString() ||
+        challenge.email !== user.email
+      ) {
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
@@ -510,7 +588,10 @@ export class AuthServices {
         );
       }
 
-      if (certificate.subject.userId !== user.id.toString() || certificate.subject.email !== user.email) {
+      if (
+        certificate.subject.userId !== user.id.toString() ||
+        certificate.subject.email !== user.email
+      ) {
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
@@ -521,7 +602,12 @@ export class AuthServices {
       const notBefore = new Date(certificate.notBefore).getTime();
       const notAfter = new Date(certificate.notAfter).getTime();
       const now = Date.now();
-      if (!Number.isFinite(notBefore) || !Number.isFinite(notAfter) || now < notBefore || now > notAfter) {
+      if (
+        !Number.isFinite(notBefore) ||
+        !Number.isFinite(notAfter) ||
+        now < notBefore ||
+        now > notAfter
+      ) {
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
@@ -529,8 +615,13 @@ export class AuthServices {
         );
       }
 
-      const issuedSignature = await UserModel.findById(user._id).then((doc) => doc?.identityCertSignature || null);
-      if (issuedSignature !== caSignatureB64 || !verifyCertificateSignature(certificate, caSignatureB64)) {
+      const issuedSignature = await UserModel.findById(user._id).then(
+        (doc) => doc?.identityCertSignature || null,
+      );
+      if (
+        issuedSignature !== caSignatureB64 ||
+        !verifyCertificateSignature(certificate, caSignatureB64)
+      ) {
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
@@ -538,15 +629,35 @@ export class AuthServices {
         );
       }
 
-      const payload = parseBase64Json<{
-        challengeId: string;
-        nonceB64: string;
-        userId: string;
-        email: string;
-        clientTimestamp: string;
-        aud?: string;
-        purpose?: string;
-      }>(signedPayloadB64);
+      let payload;
+      try {
+        payload = parseBase64Json<{
+          challengeId: string;
+          nonceB64: string;
+          userId: string;
+          email: string;
+          clientTimestamp: string;
+          aud?: string;
+          purpose?: string;
+        }>(signedPayloadB64);
+        console.log("[CHALLENGE_VERIFY_DEBUG] Payload parsed successfully", {
+          challengeId: payload.challengeId,
+          userId: payload.userId,
+          email: payload.email,
+          purpose: payload.purpose,
+          clientTimestamp: payload.clientTimestamp,
+        });
+      } catch (parseErr) {
+        console.error(
+          "[CHALLENGE_VERIFY_DEBUG] Failed to parse payload",
+          parseErr,
+        );
+        return new ErrorResponseC(
+          authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
+          HttpCodes.Unauthorized.code,
+          "Impossible de déchiffrer le payload du challenge",
+        );
+      }
 
       if (
         payload.challengeId !== challenge.challengeId ||
@@ -555,6 +666,13 @@ export class AuthServices {
         payload.email !== user.email ||
         payload.purpose !== "auth-login-proof"
       ) {
+        console.log("[CHALLENGE_VERIFY_DEBUG] Payload validation failed", {
+          challengeIdMatch: payload.challengeId === challenge.challengeId,
+          nonceMatch: payload.nonceB64 === challenge.nonceB64,
+          userIdMatch: payload.userId === user.id.toString(),
+          emailMatch: payload.email === user.email,
+          purposeMatch: payload.purpose === "auth-login-proof",
+        });
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
@@ -563,13 +681,32 @@ export class AuthServices {
       }
 
       const timestamp = Date.parse(clientTimestamp);
-      if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > CHALLENGE_SKEW_MS) {
+      if (
+        !Number.isFinite(timestamp) ||
+        Math.abs(Date.now() - timestamp) > CHALLENGE_SKEW_MS
+      ) {
+        console.log("[CHALLENGE_VERIFY_DEBUG] Timestamp validation failed", {
+          timestamp,
+          now: Date.now(),
+          skew: Math.abs(Date.now() - timestamp),
+          maxSkew: CHALLENGE_SKEW_MS,
+        });
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
           "Le timestamp du challenge est invalide",
         );
       }
+
+      console.log(
+        "[CHALLENGE_VERIFY_DEBUG] About to verify signature with public key",
+        {
+          publicKeyPreview:
+            certificate.signPublicKeySpkiB64.substring(0, 20) + "...",
+          signatureLength: signatureB64.length,
+          payloadLength: signedPayloadB64.length,
+        },
+      );
 
       const signatureValid = verifyChallengePayloadSignature(
         signedPayloadB64,
@@ -578,12 +715,14 @@ export class AuthServices {
       );
 
       if (!signatureValid) {
+        console.error("[CHALLENGE_VERIFY_DEBUG] Signature verification failed");
         return new ErrorResponseC(
           authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
           HttpCodes.Unauthorized.code,
           "La signature du challenge est invalide",
         );
       }
+      console.log("[CHALLENGE_VERIFY_DEBUG] Signature verification succeeded");
 
       challenge.used = true;
       identityChallenges.set(challenge.challengeId, challenge);
@@ -594,10 +733,15 @@ export class AuthServices {
         maxAge: Math.min(CHALLENGE_TTL_MS, 15 * 60 * 1000),
       });
 
-      const msg = formatString(authLogs.IDENTITY_CHALLENGE_VERIFY_SUCCESS.message, {
-        email: user.email,
+      const msg = formatString(
+        authLogs.IDENTITY_CHALLENGE_VERIFY_SUCCESS.message,
+        {
+          email: user.email,
+        },
+      );
+      authLogger.info(msg, {
+        type: authLogs.IDENTITY_CHALLENGE_VERIFY_SUCCESS.type,
       });
-      authLogger.info(msg, { type: authLogs.IDENTITY_CHALLENGE_VERIFY_SUCCESS.type });
 
       return new SuccessResponseC(
         authLogs.IDENTITY_CHALLENGE_VERIFY_SUCCESS.type,
@@ -606,10 +750,13 @@ export class AuthServices {
         HttpCodes.OK.code,
       );
     } catch (err) {
-      const msg = formatString(authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.message, {
-        email: user.email,
-        error: (err as Error)?.message || "",
-      });
+      const msg = formatString(
+        authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.message,
+        {
+          email: user.email,
+          error: (err as Error)?.message || "",
+        },
+      );
       authLogger.error(msg, err as Error);
       return new ErrorResponseC(
         authLogs.IDENTITY_CHALLENGE_VERIFY_ERROR_GENERIC.type,
@@ -619,69 +766,78 @@ export class AuthServices {
     }
   };
 
-  static executeGetPublicAuthData = async (email: string): Promise<ResponseT> => {
-  try {
-    const user = await UserModel.findOne({ email }).select(
-  "salt publicKey encryptedRMK_recovery rmk_recovery_iv encryptedPrivateKey_recovery privateKey_recovery_iv"
-);
-    if (!user) {
-      return new ErrorResponseC("Utilisateur introuvable", HttpCodes.NotFound.code, null);
+  static executeGetPublicAuthData = async (
+    email: string,
+  ): Promise<ResponseT> => {
+    try {
+      const user = await UserModel.findOne({ email }).select(
+        "salt publicKey encryptedRMK_recovery rmk_recovery_iv encryptedPrivateKey_recovery privateKey_recovery_iv",
+      );
+      if (!user) {
+        return new ErrorResponseC(
+          "Utilisateur introuvable",
+          HttpCodes.NotFound.code,
+          null,
+        );
+      }
+      return new SuccessResponseC(
+        "success",
+        {
+          salt: user.salt,
+          encryptedRMK_recovery: user.encryptedRMK_recovery,
+          rmk_recovery_iv: user.rmk_recovery_iv,
+          encryptedPrivateKey_recovery: user.encryptedPrivateKey_recovery,
+          privateKey_recovery_iv: user.privateKey_recovery_iv,
+        },
+        "Données récupérées",
+        HttpCodes.OK.code,
+      );
+    } catch (err) {
+      return new ErrorResponseC(
+        "Erreur serveur",
+        HttpCodes.InternalServerError.code,
+        err,
+      );
     }
-    return new SuccessResponseC(
-      "success",
-      {
-        salt: user.salt,
-        encryptedRMK_recovery: user.encryptedRMK_recovery,
-        rmk_recovery_iv: user.rmk_recovery_iv,
-        encryptedPrivateKey_recovery: user.encryptedPrivateKey_recovery,
-        privateKey_recovery_iv: user.privateKey_recovery_iv,  
-      },
-      "Données récupérées",
-      HttpCodes.OK.code
-    );
-  } catch (err) {
-    return new ErrorResponseC(
-      "Erreur serveur",
-      HttpCodes.InternalServerError.code,
-      err
-    );
-  }
-};
+  };
 
   static executeResetPasswordWithRecoveryKey = async (
-  email: string,
-  newPassword: string,
-  newEncryptedRMK: string,
-  newRmk_iv: string,
-  newEncryptedPrivateKey: string, 
-  newPrivateKey_iv: string,       
-): Promise<ResponseT> => {
-  try {
-    const user = await UserModel.findOne({ email });
-    if (!user) {
-      return new ErrorResponseC("Utilisateur introuvable", HttpCodes.NotFound.code, null);
+    email: string,
+    newPassword: string,
+    newEncryptedRMK: string,
+    newRmk_iv: string,
+    newEncryptedPrivateKey: string,
+    newPrivateKey_iv: string,
+  ): Promise<ResponseT> => {
+    try {
+      const user = await UserModel.findOne({ email });
+      if (!user) {
+        return new ErrorResponseC(
+          "Utilisateur introuvable",
+          HttpCodes.NotFound.code,
+          null,
+        );
+      }
+
+      user.password = newPassword;
+      user.encryptedRMK = newEncryptedRMK;
+      user.rmk_iv = newRmk_iv;
+      user.encryptedPrivateKey = newEncryptedPrivateKey;
+      user.privateKey_iv = newPrivateKey_iv;
+      await user.save();
+
+      return new SuccessResponseC(
+        "success",
+        null,
+        "Mot de passe réinitialisé avec succès",
+        HttpCodes.OK.code,
+      );
+    } catch (err) {
+      return new ErrorResponseC(
+        "Erreur lors de la réinitialisation",
+        HttpCodes.InternalServerError.code,
+        err,
+      );
     }
-
-  
-    user.password = newPassword;
-    user.encryptedRMK = newEncryptedRMK;
-    user.rmk_iv = newRmk_iv;
-    user.encryptedPrivateKey = newEncryptedPrivateKey; 
-    user.privateKey_iv = newPrivateKey_iv; 
-    await user.save(); 
-
-    return new SuccessResponseC(
-      "success",
-      null,
-      "Mot de passe réinitialisé avec succès",
-      HttpCodes.OK.code
-    );
-  } catch (err) {
-    return new ErrorResponseC(
-      "Erreur lors de la réinitialisation",
-      HttpCodes.InternalServerError.code,
-      err
-    );
-  }
-};
+  };
 }
